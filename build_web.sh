@@ -38,6 +38,7 @@ fi
 # --- Compile/Link Line Definitions -------------------------------------------
 common="-std=c++11 -Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -I$src_dir"
 common="$common -sUSE_SDL=3 --use-port=emdawnwebgpu -sALLOW_MEMORY_GROWTH=1"
+common="$common -sINITIAL_MEMORY=167772160"
 common="$common -sASYNCIFY=1"
 common="$common -DNDEBUG -DSDL_PLATFORM_EMSCRIPTEN"
 

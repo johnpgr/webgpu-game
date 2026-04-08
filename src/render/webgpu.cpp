@@ -5,6 +5,9 @@
 #pragma push_macro("internal")
 #undef internal
 #include <SDL3/SDL.h>
+#if defined(SDL_PLATFORM_MACOS)
+#include <SDL3/SDL_metal.h>
+#endif
 #pragma pop_macro("internal")
 
 #if defined(SDL_PLATFORM_WIN32)
@@ -36,6 +39,9 @@ struct WebGPUState {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUSurface surface;
+#if defined(SDL_PLATFORM_MACOS)
+    SDL_MetalView metal_view;
+#endif
 
     WGPUShaderModule shader_module;
     WGPUPipelineLayout pipeline_layout;
@@ -152,7 +158,12 @@ static void wgpu_device_lost_callback(
     LOG_ERROR("[WebGPU DEVICE LOST] %.*s", (int)message.length, message.data);
 }
 
-static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
+static WGPUSurface create_surface(
+    WGPUInstance instance,
+    SDL_Window* window,
+    WebGPUState* state
+) {
+    ASSERT(state != nullptr, "WebGPU state must not be null!");
 #if defined(SDL_PLATFORM_WIN32)
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
     WGPUSurfaceSourceWindowsHWND from_hwnd = {};
@@ -210,22 +221,29 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
         return wgpuInstanceCreateSurface(instance, &desc);
     }
 #elif defined(SDL_PLATFORM_MACOS)
-    SDL_PropertiesID props = SDL_GetWindowProperties(window);
     WGPUSurfaceSourceMetalLayer from_metal = {};
     from_metal.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
-    from_metal.layer = SDL_GetPointerProperty(
-        props,
-        SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,
-        nullptr
-    );
+
+    if(!state->metal_view) {
+        state->metal_view = SDL_Metal_CreateView(window);
+        if(!state->metal_view) {
+            LOG_ERROR("Failed to create SDL Metal view: %s", SDL_GetError());
+            return nullptr;
+        }
+    }
+
+    from_metal.layer = SDL_Metal_GetLayer(state->metal_view);
 
     if(from_metal.layer) {
         WGPUSurfaceDescriptor desc = {};
         desc.nextInChain = &from_metal.chain;
         return wgpuInstanceCreateSurface(instance, &desc);
     }
+
+    LOG_ERROR("Failed to get CAMetalLayer from SDL Metal view");
 #elif OS_EMSCRIPTEN
     (void)window;
+    (void)state;
     WGPUEmscriptenSurfaceSourceCanvasHTMLSelector from_canvas =
         WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
     from_canvas.selector = {"#canvas", WGPU_STRLEN};
@@ -240,9 +258,12 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
 #else
     (void)instance;
     (void)window;
+    (void)state;
     LOG_FATAL("Failed to create WebGPU surface: unsupported platform");
     return nullptr;
 #endif
+
+    return nullptr;
 }
 
 static void wgpu_request_adapter_callback(
@@ -533,7 +554,7 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     wgpuSetLogLevel(WGPULogLevel_Warn);
 #endif
 
-    state->surface = create_surface(state->instance, window);
+    state->surface = create_surface(state->instance, window, state);
     if(!state->surface) {
         LOG_FATAL("Failed to create WebGPU surface");
         return result;
@@ -605,11 +626,11 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     SDL_GetWindowSize(window, &w, &h);
     state->surface_width = (u32)w;
     state->surface_height = (u32)h;
-#if OS_EMSCRIPTEN
-    state->surface_format = WGPUTextureFormat_RGBA8Unorm;
-#else
-    state->surface_format = WGPUTextureFormat_BGRA8Unorm;
-#endif
+    WGPUSurfaceCapabilities surface_caps = {};
+    wgpuSurfaceGetCapabilities(state->surface, state->adapter, &surface_caps);
+    ASSERT(surface_caps.formatCount > 0, "No surface formats available");
+    state->surface_format = surface_caps.formats[0];
+    wgpuSurfaceCapabilitiesFreeMembers(surface_caps);
 
     FileData shader_source = os_read_file(arena, "assets/shaders/sprite.wgsl");
     if(shader_source.data == nullptr || shader_source.size == 0) {
@@ -939,6 +960,11 @@ void cleanup_webgpu(WebGPURenderer* renderer) {
     if(state->surface) {
         wgpuSurfaceRelease(state->surface);
     }
+#if defined(SDL_PLATFORM_MACOS)
+    if(state->metal_view) {
+        SDL_Metal_DestroyView(state->metal_view);
+    }
+#endif
     if(state->queue) {
         wgpuQueueRelease(state->queue);
     }

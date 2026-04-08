@@ -24,6 +24,8 @@ vendor_dir="$root_dir/vendor"
 if [ "${vendor:-}" = "1" ]; then
   echo "=== Downloading vendor dependencies ==="
 
+  cmake_platform_args=()
+
   # Detect platform for downloads
   arch="$(uname -m)"
   case "$arch" in
@@ -34,7 +36,15 @@ if [ "${vendor:-}" = "1" ]; then
   esac
 
   case "$(uname -s)" in
-    Darwin) dl_platform="macos" ;;
+    Darwin)
+      dl_platform="macos"
+      macos_sdk="$(xcrun --show-sdk-path)"
+      if [ -z "$macos_sdk" ] || [ ! -d "$macos_sdk" ]; then
+        echo "failed to locate macOS SDK with xcrun --show-sdk-path" >&2
+        exit 1
+      fi
+      cmake_platform_args+=("-DCMAKE_OSX_SYSROOT=$macos_sdk")
+      ;;
     Linux)  dl_platform="linux" ;;
     *)      echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
   esac
@@ -64,6 +74,7 @@ if [ "${vendor:-}" = "1" ]; then
     mkdir -p "$build_sdl3_dir"
     cmake -S "$sdl3_src_dir" -B "$build_sdl3_dir" \
       -DCMAKE_BUILD_TYPE=Release \
+      "${cmake_platform_args[@]}" \
       -DSDL_SHARED=ON \
       -DSDL_STATIC=OFF \
       -DCMAKE_INSTALL_PREFIX="$vendor_dir/SDL3" \
@@ -111,6 +122,7 @@ if [ "${vendor:-}" = "1" ]; then
     mkdir -p "$build_sdl3_image_dir"
     cmake -S "$sdl3_image_src_dir" -B "$build_sdl3_image_dir" \
       -DCMAKE_BUILD_TYPE=Release \
+      "${cmake_platform_args[@]}" \
       -DSDL_SHARED=ON \
       -DSDL_STATIC=OFF \
       -DCMAKE_INSTALL_PREFIX="$vendor_dir/SDL3_image" \
