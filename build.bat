@@ -176,7 +176,8 @@ set common=/std:c++20 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_di
 if "%debug%"=="1"   set compile=cl %common% /Od /Zi
 if "%release%"=="1" set compile=cl %common% /O2 /DNDEBUG
 
-set libs=/LIBPATH:"%webgpu_dir%\lib" /LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
+set host_libs=/LIBPATH:"%webgpu_dir%\lib" /LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
+set dll_libs=/LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" SDL3_image.lib SDL3.lib
 
 :: --- Copy Assets -------------------------------------------------------------
 if exist "%root_dir%\assets" (
@@ -196,7 +197,14 @@ if "%~1"=="release" if "%~2"=="" set game=1
 pushd "%bin_dir%"
 if "%game%"=="1" (
     set didbuild=1
-    %compile% "%src_dir%\app\game_main.cpp" /link %libs% /out:"%bin_dir%\game.exe" || exit /b 1
+    
+    echo Building game host executable...
+    %compile% "%src_dir%\app\game_main.cpp" /link %host_libs% /out:"%bin_dir%\game_host.exe" || exit /b 1
+    echo Built %bin_dir%\game_host.exe
+    
+    echo Building game DLL...
+    %compile% /LD "%src_dir%\game\game_dll_main.cpp" /link %dll_libs% /out:"%bin_dir%\game_code.dll" || exit /b 1
+    echo Built %bin_dir%\game_code.dll
 )
 popd
 
@@ -205,4 +213,4 @@ if not "%didbuild%"=="1" (
     echo [WARNING] no valid build target. usage: build [vendor] [game] [debug^|release]
     exit /b 1
 )
-echo built %bin_dir%\game.exe
+echo Build complete.

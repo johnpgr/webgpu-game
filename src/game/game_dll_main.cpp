@@ -1,0 +1,5 @@
+#include "base/base_mod.cpp"
+#include "os/os_mod.cpp"
+#include "assets/assets_mod.cpp"
+#include "draw/draw_mod.cpp"
+#include "game/game_core.cpp"

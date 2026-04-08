@@ -1,6 +1,6 @@
 #include "game/game_core.h"
 
-GameState* init_game_state(Arena* arena, Atlas* atlas) {
+GAME_DLL_EXPORT GameState* game_init(Arena* arena, Atlas* atlas) {
     GameState* game = push_struct(arena, GameState);
     game->arena = arena;
     game->render_frame = create_render_frame(arena, 4096);
@@ -10,7 +10,7 @@ GameState* init_game_state(Arena* arena, Atlas* atlas) {
     return game;
 }
 
-void game_update(GameState* game, f64 dt) {
+GAME_DLL_EXPORT void game_update(GameState* game, f64 dt) {
     render_frame_reset(&game->render_frame);
     game->time += dt;
 
@@ -65,4 +65,8 @@ void game_update(GameState* game, f64 dt) {
             );
         }
     }
+}
+
+GAME_DLL_EXPORT u32 game_get_api_version(void) {
+    return GAME_API_VERSION;
 }

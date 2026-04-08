@@ -321,7 +321,10 @@ fi
 if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common $sdl3_cflags $sdl3_image_cflags"; fi
 if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags $sdl3_image_cflags"; fi
 
-link="$webgpu_libs $sdl3_image_libs $sdl3_libs $link_os -lpthread"
+host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $link_os -lpthread"
+
+# For shared library compilation
+dll_compile="$compile -fPIC -shared"
 
 # --- Prep Directories --------------------------------------------------------
 mkdir -p "$bin_dir"
@@ -346,8 +349,20 @@ if [ -z "${game:-}" ] && [ -z "${compdb:-}" ]; then game=1; fi
 
 if [ "${game:-}" = "1" ]; then
     didbuild=1
-    $compile "$src_dir/app/game_main.cpp" $link -o "$bin_dir/game"
-    echo "built $bin_dir/game"
+    
+    echo "Building game host executable..."
+    $compile "$src_dir/app/game_main.cpp" $host_link -o "$bin_dir/game_host"
+    echo "Built $bin_dir/game_host"
+    
+    echo "Building game shared library..."
+    dll_name="$bin_dir/game_code"
+    if [ "$platform" = "macos" ]; then
+        dll_ext=".dylib"
+    else
+        dll_ext=".so"
+    fi
+    $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags -o "$bin_dir/game_code$dll_ext"
+    echo "Built $bin_dir/game_code$dll_ext"
 fi
 
 # --- Compdb ------------------------------------------------------------------
