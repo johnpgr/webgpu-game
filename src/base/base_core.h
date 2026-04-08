@@ -187,3 +187,9 @@ inline f64 get_ticks_f64(void) {
 #else
 #define ASSERT(expr, msg) ((void)sizeof((expr) ? true : false))
 #endif
+
+#if OS_WINDOWS
+#define GAME_DLL_EXPORT extern "C" __declspec(dllexport)
+#else
+#define GAME_DLL_EXPORT extern "C"
+#endif

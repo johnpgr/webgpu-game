@@ -9,15 +9,7 @@ struct AtlasFrame {
     f32 height_px;
 };
 
-struct AtlasSprite {
-    String name;
-    AtlasFrame* frames;
-    u32 frame_count;
-};
-
 struct Atlas {
-    AtlasSprite* sprites;
-    u32 sprite_count;
     u32 atlas_width;
     u32 atlas_height;
     char const* image_path;
@@ -29,7 +21,7 @@ struct AtlasImage {
     u8* pixels;
 };
 
-Atlas atlas_load(Arena* arena, char const* json_path, char const* png_path);
+Atlas atlas_load(char const* png_path);
 AtlasImage atlas_load_image(Arena* arena, char const* png_path);
-AtlasSprite* atlas_find(Atlas* atlas, String name);
-AtlasFrame* atlas_frame(AtlasSprite* sprite, u32 frame_index);
+u32 atlas_animation_frame_count(u32 animation_id);
+AtlasFrame atlas_animation_frame(u32 animation_id, u32 frame_index);

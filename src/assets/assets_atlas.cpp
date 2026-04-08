@@ -11,384 +11,20 @@
 #endif
 #pragma pop_macro("internal")
 
+#include "../../assets/sprites/atlas.h"
 #include "assets/assets_atlas.h"
-#include "os/os_mod.h"
 
-internal bool json_is_whitespace(u8 c) {
-    return c == ' ' || c == '\n' || c == '\r' || c == '\t';
-}
-
-internal void skip_whitespace(u8* data, u64 size, u64* pos) {
-    while(*pos < size && json_is_whitespace(data[*pos])) {
-        ++(*pos);
-    }
-}
-
-internal bool consume_char(u8* data, u64 size, u64* pos, char c) {
-    skip_whitespace(data, size, pos);
-    if(*pos < size && data[*pos] == (u8)c) {
-        ++(*pos);
-        return true;
-    }
-    return false;
-}
-
-internal bool expect_char(u8* data, u64 size, u64* pos, char c) {
-    if(consume_char(data, size, pos, c)) {
-        return true;
+internal AtlasFrame atlas_frame_from_packed_sprite(AtlasSprite const* sprite) {
+    AtlasFrame frame = {};
+    if(sprite == nullptr) {
+        return frame;
     }
 
-    LOG_ERROR("Malformed atlas JSON: expected '%c'", c);
-    return false;
-}
-
-internal String parse_json_string(u8* data, u64 size, u64* pos) {
-    skip_whitespace(data, size, pos);
-    if(*pos >= size || data[*pos] != '"') {
-        LOG_ERROR("Malformed atlas JSON: expected string");
-        return {};
-    }
-
-    ++(*pos);
-    u64 start = *pos;
-    while(*pos < size) {
-        u8 c = data[*pos];
-        if(c == '\\') {
-            *pos += 2;
-            continue;
-        }
-        if(c == '"') {
-            String result = {data + start, *pos - start};
-            ++(*pos);
-            return result;
-        }
-        ++(*pos);
-    }
-
-    LOG_ERROR("Malformed atlas JSON: unterminated string");
-    return {};
-}
-
-internal u64 scan_json_number(u8* data, u64 size, u64 pos) {
-    u64 start = pos;
-    if(pos < size && (data[pos] == '-' || data[pos] == '+')) {
-        ++pos;
-    }
-    while(pos < size && data[pos] >= '0' && data[pos] <= '9') {
-        ++pos;
-    }
-    if(pos < size && data[pos] == '.') {
-        ++pos;
-        while(pos < size && data[pos] >= '0' && data[pos] <= '9') {
-            ++pos;
-        }
-    }
-    if(pos < size && (data[pos] == 'e' || data[pos] == 'E')) {
-        ++pos;
-        if(pos < size && (data[pos] == '-' || data[pos] == '+')) {
-            ++pos;
-        }
-        while(pos < size && data[pos] >= '0' && data[pos] <= '9') {
-            ++pos;
-        }
-    }
-    return pos - start;
-}
-
-internal f32 parse_json_number_f32(u8* data, u64 size, u64* pos) {
-    skip_whitespace(data, size, pos);
-    u64 len = scan_json_number(data, size, *pos);
-    if(len == 0 || len >= 64) {
-        LOG_ERROR("Malformed atlas JSON: invalid float");
-        return 0.0f;
-    }
-
-    char buffer[64] = {};
-    memcpy(buffer, data + *pos, (usize)len);
-    *pos += len;
-    return strtof(buffer, nullptr);
-}
-
-internal u32 parse_json_number_u32(u8* data, u64 size, u64* pos) {
-    skip_whitespace(data, size, pos);
-    u64 len = scan_json_number(data, size, *pos);
-    if(len == 0 || len >= 32) {
-        LOG_ERROR("Malformed atlas JSON: invalid integer");
-        return 0;
-    }
-
-    char buffer[32] = {};
-    memcpy(buffer, data + *pos, (usize)len);
-    *pos += len;
-    return (u32)strtoul(buffer, nullptr, 10);
-}
-
-internal void skip_json_value(u8* data, u64 size, u64* pos);
-
-internal void skip_json_array(u8* data, u64 size, u64* pos) {
-    if(!expect_char(data, size, pos, '[')) {
-        return;
-    }
-
-    if(consume_char(data, size, pos, ']')) {
-        return;
-    }
-
-    for(;;) {
-        skip_json_value(data, size, pos);
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, ']');
-        return;
-    }
-}
-
-internal void skip_json_object(u8* data, u64 size, u64* pos) {
-    if(!expect_char(data, size, pos, '{')) {
-        return;
-    }
-
-    if(consume_char(data, size, pos, '}')) {
-        return;
-    }
-
-    for(;;) {
-        parse_json_string(data, size, pos);
-        expect_char(data, size, pos, ':');
-        skip_json_value(data, size, pos);
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, '}');
-        return;
-    }
-}
-
-internal void skip_json_value(u8* data, u64 size, u64* pos) {
-    skip_whitespace(data, size, pos);
-    if(*pos >= size) {
-        return;
-    }
-
-    u8 c = data[*pos];
-    if(c == '{') {
-        skip_json_object(data, size, pos);
-    } else if(c == '[') {
-        skip_json_array(data, size, pos);
-    } else if(c == '"') {
-        parse_json_string(data, size, pos);
-    } else {
-        u64 len = scan_json_number(data, size, *pos);
-        if(len > 0) {
-            *pos += len;
-            return;
-        }
-
-        if(*pos + 4 <= size && memcmp(data + *pos, "true", 4) == 0) {
-            *pos += 4;
-        } else if(*pos + 5 <= size && memcmp(data + *pos, "false", 5) == 0) {
-            *pos += 5;
-        } else if(*pos + 4 <= size && memcmp(data + *pos, "null", 4) == 0) {
-            *pos += 4;
-        } else {
-            LOG_ERROR("Malformed atlas JSON: unsupported value");
-        }
-    }
-}
-
-internal bool string_equals_cstr(String a, char const* b) {
-    return string_equals(a, string_lit(b));
-}
-
-internal u32 count_token_occurrences(u8* data, u64 size, char const* token) {
-    u64 token_size = (u64)strlen(token);
-    u32 count = 0;
-    if(token_size == 0 || token_size > size) {
-        return 0;
-    }
-
-    for(u64 i = 0; i + token_size <= size; ++i) {
-        if(memcmp(data + i, token, (usize)token_size) == 0) {
-            ++count;
-        }
-    }
-    return count;
-}
-
-internal void parse_atlas_metadata(Atlas* atlas, u8* data, u64 size, u64* pos) {
-    if(!expect_char(data, size, pos, '{')) {
-        return;
-    }
-
-    if(consume_char(data, size, pos, '}')) {
-        return;
-    }
-
-    for(;;) {
-        String key = parse_json_string(data, size, pos);
-        expect_char(data, size, pos, ':');
-
-        if(string_equals_cstr(key, "width")) {
-            atlas->atlas_width = parse_json_number_u32(data, size, pos);
-        } else if(string_equals_cstr(key, "height")) {
-            atlas->atlas_height = parse_json_number_u32(data, size, pos);
-        } else {
-            skip_json_value(data, size, pos);
-        }
-
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, '}');
-        return;
-    }
-}
-
-internal void parse_frame_object(
-    AtlasFrame* frame,
-    u8* data,
-    u64 size,
-    u64* pos
-) {
-    if(!expect_char(data, size, pos, '{')) {
-        return;
-    }
-
-    if(consume_char(data, size, pos, '}')) {
-        return;
-    }
-
-    for(;;) {
-        String key = parse_json_string(data, size, pos);
-        expect_char(data, size, pos, ':');
-
-        if(string_equals_cstr(key, "u0")) {
-            frame->uv_min.x = parse_json_number_f32(data, size, pos);
-        } else if(string_equals_cstr(key, "v0")) {
-            frame->uv_min.y = parse_json_number_f32(data, size, pos);
-        } else if(string_equals_cstr(key, "u1")) {
-            frame->uv_max.x = parse_json_number_f32(data, size, pos);
-        } else if(string_equals_cstr(key, "v1")) {
-            frame->uv_max.y = parse_json_number_f32(data, size, pos);
-        } else if(string_equals_cstr(key, "w")) {
-            frame->width_px = (f32)parse_json_number_u32(data, size, pos);
-        } else if(string_equals_cstr(key, "h")) {
-            frame->height_px = (f32)parse_json_number_u32(data, size, pos);
-        } else {
-            (void)parse_json_number_f32(data, size, pos);
-        }
-
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, '}');
-        return;
-    }
-}
-
-internal void parse_sprite_object(
-    AtlasSprite* sprite,
-    AtlasFrame* frames,
-    u32* frame_index,
-    u8* data,
-    u64 size,
-    u64* pos
-) {
-    if(!expect_char(data, size, pos, '{')) {
-        return;
-    }
-
-    if(consume_char(data, size, pos, '}')) {
-        return;
-    }
-
-    for(;;) {
-        String key = parse_json_string(data, size, pos);
-        expect_char(data, size, pos, ':');
-
-        if(string_equals_cstr(key, "frames")) {
-            if(!expect_char(data, size, pos, '[')) {
-                return;
-            }
-
-            sprite->frames = frames + *frame_index;
-            sprite->frame_count = 0;
-
-            if(!consume_char(data, size, pos, ']')) {
-                for(;;) {
-                    AtlasFrame* frame = frames + *frame_index;
-                    parse_frame_object(frame, data, size, pos);
-                    ++(*frame_index);
-                    ++sprite->frame_count;
-
-                    if(consume_char(data, size, pos, ',')) {
-                        continue;
-                    }
-                    expect_char(data, size, pos, ']');
-                    break;
-                }
-            }
-        } else {
-            skip_json_value(data, size, pos);
-        }
-
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, '}');
-        return;
-    }
-}
-
-internal void parse_sprites_object(
-    Atlas* atlas,
-    AtlasFrame* frames,
-    u8* data,
-    u64 size,
-    u64* pos
-) {
-    if(!expect_char(data, size, pos, '{')) {
-        return;
-    }
-
-    u32 sprite_index = 0;
-    u32 frame_index = 0;
-
-    if(consume_char(data, size, pos, '}')) {
-        return;
-    }
-
-    for(;;) {
-        ASSERT(
-            sprite_index < atlas->sprite_count,
-            "Atlas sprite count mismatch!"
-        );
-        AtlasSprite* sprite = &atlas->sprites[sprite_index++];
-        sprite->name = parse_json_string(data, size, pos);
-        expect_char(data, size, pos, ':');
-        parse_sprite_object(sprite, frames, &frame_index, data, size, pos);
-
-        if(consume_char(data, size, pos, ',')) {
-            continue;
-        }
-        expect_char(data, size, pos, '}');
-        break;
-    }
-
-    ASSERT(sprite_index == atlas->sprite_count, "Atlas sprite count mismatch!");
-}
-
-internal void sort_sprites_by_name(Atlas* atlas) {
-    for(u32 i = 1; i < atlas->sprite_count; ++i) {
-        AtlasSprite key = atlas->sprites[i];
-        i32 j = (i32)i - 1;
-        while(j >= 0 && string_compare(atlas->sprites[j].name, key.name) > 0) {
-            atlas->sprites[j + 1] = atlas->sprites[j];
-            --j;
-        }
-        atlas->sprites[j + 1] = key;
-    }
+    frame.uv_min = vec2(sprite->u0, sprite->v0);
+    frame.uv_max = vec2(sprite->u1, sprite->v1);
+    frame.width_px = (f32)sprite->w;
+    frame.height_px = (f32)sprite->h;
+    return frame;
 }
 
 AtlasImage atlas_load_image(Arena* arena, char const* png_path) {
@@ -453,98 +89,45 @@ AtlasImage atlas_load_image(Arena* arena, char const* png_path) {
     return image;
 }
 
-Atlas atlas_load(Arena* arena, char const* json_path, char const* png_path) {
-    ASSERT(arena != nullptr, "Arena must not be null!");
-    ASSERT(json_path != nullptr, "JSON path must not be null!");
+Atlas atlas_load(char const* png_path) {
     ASSERT(png_path != nullptr, "PNG path must not be null!");
 
     Atlas atlas = {};
+    atlas.atlas_width = ATLAS_ATLAS_WIDTH;
+    atlas.atlas_height = ATLAS_ATLAS_HEIGHT;
     atlas.image_path = png_path;
 
-    FileData json_file = os_read_file(arena, json_path);
-    if(json_file.data == nullptr || json_file.size == 0) {
-        return atlas;
-    }
-
-    atlas.sprite_count =
-        count_token_occurrences(json_file.data, json_file.size, "\"frames\"");
-    u32 total_frame_count =
-        count_token_occurrences(json_file.data, json_file.size, "\"frame\"");
-    atlas.sprites = push_array(arena, AtlasSprite, atlas.sprite_count);
-    AtlasFrame* frames = push_array(arena, AtlasFrame, total_frame_count);
-
-    u64 pos = 0;
-    if(expect_char(json_file.data, json_file.size, &pos, '{')) {
-        if(!consume_char(json_file.data, json_file.size, &pos, '}')) {
-            for(;;) {
-                String key =
-                    parse_json_string(json_file.data, json_file.size, &pos);
-                expect_char(json_file.data, json_file.size, &pos, ':');
-
-                if(string_equals_cstr(key, "atlas")) {
-                    parse_atlas_metadata(
-                        &atlas,
-                        json_file.data,
-                        json_file.size,
-                        &pos
-                    );
-                } else if(string_equals_cstr(key, "sprites")) {
-                    parse_sprites_object(
-                        &atlas,
-                        frames,
-                        json_file.data,
-                        json_file.size,
-                        &pos
-                    );
-                } else {
-                    skip_json_value(json_file.data, json_file.size, &pos);
-                }
-
-                if(consume_char(json_file.data, json_file.size, &pos, ',')) {
-                    continue;
-                }
-                expect_char(json_file.data, json_file.size, &pos, '}');
-                break;
-            }
-        }
-    }
-
-    sort_sprites_by_name(&atlas);
-    LOG_INFO("Atlas loaded: %u sprites", atlas.sprite_count);
+    LOG_INFO("Atlas loaded: %u animations", (u32)ANIMATION_ID_COUNT);
     return atlas;
 }
 
-AtlasSprite* atlas_find(Atlas* atlas, String name) {
-    if(atlas == nullptr || atlas->sprites == nullptr) {
-        return nullptr;
+u32 atlas_animation_frame_count(u32 animation_id) {
+    if(animation_id >= (u32)ANIMATION_ID_COUNT) {
+        LOG_ERROR("Atlas animation id out of bounds: %u", animation_id);
+        return 0;
     }
 
-    i32 left = 0;
-    i32 right = (i32)atlas->sprite_count - 1;
-    while(left <= right) {
-        i32 mid = left + (right - left) / 2;
-        AtlasSprite* sprite = &atlas->sprites[mid];
-        i32 cmp = string_compare(sprite->name, name);
-        if(cmp == 0) {
-            return sprite;
-        }
-        if(cmp < 0) {
-            left = mid + 1;
-        } else {
-            right = mid - 1;
-        }
-    }
-
-    return nullptr;
+    return (u32)atlas_animations[animation_id].frame_count;
 }
 
-AtlasFrame* atlas_frame(AtlasSprite* sprite, u32 frame_index) {
-    if(sprite == nullptr || sprite->frames == nullptr) {
-        return nullptr;
+AtlasFrame atlas_animation_frame(u32 animation_id, u32 frame_index) {
+    AtlasFrame frame = {};
+    if(animation_id >= (u32)ANIMATION_ID_COUNT) {
+        LOG_ERROR("Atlas animation id out of bounds: %u", animation_id);
+        return frame;
     }
-    if(frame_index >= sprite->frame_count) {
-        LOG_ERROR("Atlas frame index out of bounds: %u", frame_index);
-        return nullptr;
+
+    AtlasAnimation const* animation = &atlas_animations[animation_id];
+    if(frame_index >= (u32)animation->frame_count) {
+        LOG_ERROR(
+            "Atlas frame index out of bounds: animation=%u frame=%u",
+            animation_id,
+            frame_index
+        );
+        return frame;
     }
-    return &sprite->frames[frame_index];
+
+    u32 sprite_id = (u32)animation->first + frame_index;
+    ASSERT(sprite_id < (u32)SPRITE_ID_COUNT, "Atlas sprite id out of bounds!");
+    return atlas_frame_from_packed_sprite(&atlas_sprites[sprite_id]);
 }

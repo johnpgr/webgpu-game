@@ -356,11 +356,7 @@ int main(int argc, char** argv) {
 #endif
 
     Atlas* atlas = push_struct(arena, Atlas);
-    *atlas = atlas_load(
-        arena,
-        "assets/sprites/atlas.json",
-        "assets/sprites/atlas.png"
-    );
+    *atlas = atlas_load("assets/sprites/atlas.png");
 
     app.renderer = init_webgpu(app.window, arena, atlas);
     if(!app.renderer.internal_state) {

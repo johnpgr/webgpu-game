@@ -14,9 +14,25 @@ if [ "${release:-}" != "1" ]; then debug=1; fi
 if [ "${debug:-}" = "1" ];   then echo "[debug mode]"; fi
 if [ "${release:-}" = "1" ]; then echo "[release mode]"; fi
 
+if [ "${web_run:-}" = "1" ]; then
+  web=1
+  run=1
+fi
+
+# Running implies web mode when no explicit target was provided.
+if [ "${run:-}" = "1" ] && [ -z "${game:-}" ] && [ -z "${web:-}" ]; then
+  web=1
+fi
+
+# Default target remains native game build.
+if [ -z "${game:-}" ] && [ -z "${web:-}" ]; then
+  game=1
+fi
+
 # --- Paths -------------------------------------------------------------------
 root_dir="$(pwd)"
 bin_dir="$root_dir/bin"
+web_dir="$bin_dir/web"
 src_dir="$root_dir/src"
 vendor_dir="$root_dir/vendor"
 
@@ -212,174 +228,216 @@ if [ "${vendor:-}" = "1" ]; then
   exit 0
 fi
 
-# --- Detect Platform ---------------------------------------------------------
-case "$(uname -s)" in
+warning_flags="-Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -Wno-c99-designator"
+didbuild=""
+
+# --- Build Native Game (desktop) ---------------------------------------------
+if [ "${game:-}" = "1" ]; then
+  # --- Detect Platform -------------------------------------------------------
+  case "$(uname -s)" in
   Darwin) platform=macos ;;
   Linux)  platform=linux ;;
   *)      echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
-esac
+  esac
 
-# --- Find WebGPU (wgpu-native) ------------------------------------------------
-webgpu_inc="$root_dir/vendor/webgpu/include"
-webgpu_lib="$root_dir/vendor/webgpu/lib"
+  echo "[$platform]"
 
-if [ ! -f "$webgpu_inc/webgpu/webgpu.h" ]; then
+  # --- Find WebGPU (wgpu-native) ---------------------------------------------
+  webgpu_inc="$root_dir/vendor/webgpu/include"
+  webgpu_lib="$root_dir/vendor/webgpu/lib"
+
+  if [ ! -f "$webgpu_inc/webgpu/webgpu.h" ]; then
     echo "WebGPU headers not found at $webgpu_inc/webgpu/webgpu.h" >&2
     echo "Run: ./build.sh vendor   to download dependencies" >&2
     exit 1
-fi
+  fi
 
-webgpu_cflags="-I$webgpu_inc"
-webgpu_libs="-L$webgpu_lib -lwgpu_native -Wl,-rpath,$webgpu_lib"
+  webgpu_cflags="-I$webgpu_inc"
+  webgpu_libs="-L$webgpu_lib -lwgpu_native -Wl,-rpath,$webgpu_lib"
 
-# Try to find SDL3: vendor dir first, then pkg-config, then system paths
-sdl3_cflags=""
-sdl3_libs=""
-sdl3_vendor_inc="$root_dir/vendor/SDL3/include"
-sdl3_vendor_lib="$root_dir/vendor/SDL3/lib"
-sdl3_vendor_lib64="$root_dir/vendor/SDL3/lib64"
+  # Try to find SDL3: vendor dir first, then pkg-config, then system paths
+  sdl3_cflags=""
+  sdl3_libs=""
+  sdl3_vendor_inc="$root_dir/vendor/SDL3/include"
+  sdl3_vendor_lib="$root_dir/vendor/SDL3/lib"
+  sdl3_vendor_lib64="$root_dir/vendor/SDL3/lib64"
 
-if [ -f "$sdl3_vendor_inc/SDL3/SDL.h" ]; then
+  if [ -f "$sdl3_vendor_inc/SDL3/SDL.h" ]; then
     sdl3_cflags="-I$sdl3_vendor_inc"
     if [ -f "$sdl3_vendor_lib64/libSDL3.so" ] || [ -f "$sdl3_vendor_lib64/libSDL3.dylib" ]; then
-        sdl3_libs="-L$sdl3_vendor_lib64 -lSDL3 -Wl,-rpath,$sdl3_vendor_lib64"
+      sdl3_libs="-L$sdl3_vendor_lib64 -lSDL3 -Wl,-rpath,$sdl3_vendor_lib64"
     elif [ -f "$sdl3_vendor_lib/libSDL3.so" ] || [ -f "$sdl3_vendor_lib/libSDL3.dylib" ]; then
-        sdl3_libs="-L$sdl3_vendor_lib -lSDL3 -Wl,-rpath,$sdl3_vendor_lib"
+      sdl3_libs="-L$sdl3_vendor_lib -lSDL3 -Wl,-rpath,$sdl3_vendor_lib"
     fi
-elif pkg-config --exists sdl3 2>/dev/null; then
+  elif pkg-config --exists sdl3 2>/dev/null; then
     sdl3_cflags=$(pkg-config --cflags sdl3)
     sdl3_libs=$(pkg-config --libs sdl3)
-else
+  else
     for d in /usr/local/include /opt/homebrew/include /usr/include; do
-        if [ -f "$d/SDL3/SDL.h" ]; then
-            sdl3_cflags="-I$d"
-            break
-        fi
+      if [ -f "$d/SDL3/SDL.h" ]; then
+        sdl3_cflags="-I$d"
+        break
+      fi
     done
     for d in /usr/local/lib /opt/homebrew/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
-        if [ -f "$d/libSDL3.so" ] || [ -f "$d/libSDL3.dylib" ]; then
-            sdl3_libs="-L$d -lSDL3"
-            break
-        fi
+      if [ -f "$d/libSDL3.so" ] || [ -f "$d/libSDL3.dylib" ]; then
+        sdl3_libs="-L$d -lSDL3"
+        break
+      fi
     done
-fi
+  fi
 
-if [ -z "$sdl3_cflags" ] || [ -z "$sdl3_libs" ]; then
+  if [ -z "$sdl3_cflags" ] || [ -z "$sdl3_libs" ]; then
     echo "SDL3 not found. Install SDL3 or run: ./build.sh vendor" >&2
     exit 1
-fi
+  fi
 
-# --- Find SDL3_image ---------------------------------------------------------
-sdl3_image_cflags=""
-sdl3_image_libs=""
-sdl3_image_vendor_inc="$root_dir/vendor/SDL3_image/include"
-sdl3_image_vendor_lib="$root_dir/vendor/SDL3_image/lib"
-sdl3_image_vendor_lib64="$root_dir/vendor/SDL3_image/lib64"
+  # --- Find SDL3_image -------------------------------------------------------
+  sdl3_image_cflags=""
+  sdl3_image_libs=""
+  sdl3_image_vendor_inc="$root_dir/vendor/SDL3_image/include"
+  sdl3_image_vendor_lib="$root_dir/vendor/SDL3_image/lib"
+  sdl3_image_vendor_lib64="$root_dir/vendor/SDL3_image/lib64"
 
-if [ -f "$sdl3_image_vendor_inc/SDL3_image/SDL_image.h" ]; then
+  if [ -f "$sdl3_image_vendor_inc/SDL3_image/SDL_image.h" ]; then
     sdl3_image_cflags="-I$sdl3_image_vendor_inc"
     if [ -f "$sdl3_image_vendor_lib64/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib64/libSDL3_image.dylib" ]; then
-        sdl3_image_libs="-L$sdl3_image_vendor_lib64 -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib64"
+      sdl3_image_libs="-L$sdl3_image_vendor_lib64 -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib64"
     elif [ -f "$sdl3_image_vendor_lib/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib/libSDL3_image.dylib" ]; then
-        sdl3_image_libs="-L$sdl3_image_vendor_lib -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib"
+      sdl3_image_libs="-L$sdl3_image_vendor_lib -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib"
     fi
-elif pkg-config --exists sdl3-image 2>/dev/null; then
+  elif pkg-config --exists sdl3-image 2>/dev/null; then
     sdl3_image_cflags=$(pkg-config --cflags sdl3-image)
     sdl3_image_libs=$(pkg-config --libs sdl3-image)
-else
+  else
     for d in /usr/local/include /opt/homebrew/include /usr/include; do
-        if [ -f "$d/SDL3_image/SDL_image.h" ]; then
-            sdl3_image_cflags="-I$d"
-            break
-        fi
+      if [ -f "$d/SDL3_image/SDL_image.h" ]; then
+        sdl3_image_cflags="-I$d"
+        break
+      fi
     done
     for d in /usr/local/lib /opt/homebrew/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
-        if [ -f "$d/libSDL3_image.so" ] || [ -f "$d/libSDL3_image.dylib" ]; then
-            sdl3_image_libs="-L$d -lSDL3_image"
-            break
-        fi
+      if [ -f "$d/libSDL3_image.so" ] || [ -f "$d/libSDL3_image.dylib" ]; then
+        sdl3_image_libs="-L$d -lSDL3_image"
+        break
+      fi
     done
-fi
+  fi
 
-if [ -z "$sdl3_image_cflags" ] || [ -z "$sdl3_image_libs" ]; then
+  if [ -z "$sdl3_image_cflags" ] || [ -z "$sdl3_image_libs" ]; then
     echo "SDL3_image not found. Run: ./build.sh vendor" >&2
     exit 1
-fi
+  fi
 
-# --- Compile/Link Line Definitions -------------------------------------------
-compiler="${CXX:-clang++}"
-common="-std=c++11 -Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -I$src_dir $webgpu_cflags"
+  # --- Compile/Link Line Definitions -----------------------------------------
+  compiler="${CXX:-clang++}"
+  common="-std=c++20 $warning_flags -I$src_dir $webgpu_cflags"
 
-if [ "$platform" = "macos" ]; then
+  if [ "$platform" = "macos" ]; then
     common="$common -DSDL_PLATFORM_MACOS"
     link_os="-framework Cocoa -framework IOKit -framework CoreVideo"
-else
+  else
     common="$common -DSDL_PLATFORM_LINUX"
     link_os="-ldl -lm -lX11 -lXrandr"
-fi
+  fi
 
-if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common $sdl3_cflags $sdl3_image_cflags"; fi
-if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags $sdl3_image_cflags"; fi
+  if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common $sdl3_cflags $sdl3_image_cflags"; fi
+  if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags $sdl3_image_cflags"; fi
 
-host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $link_os -lpthread"
+  host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $link_os -lpthread"
 
-# For shared library compilation
-dll_compile="$compile -fPIC -shared"
+  # For shared library compilation
+  dll_compile="$compile -fPIC -shared"
 
-# --- Prep Directories --------------------------------------------------------
-mkdir -p "$bin_dir"
+  # --- Prep Directories ------------------------------------------------------
+  mkdir -p "$bin_dir"
 
-# --- Copy Assets -------------------------------------------------------------
-if [ -d "$root_dir/assets" ]; then
+  # --- Copy Assets -----------------------------------------------------------
+  if [ -d "$root_dir/assets" ]; then
     cp -r "$root_dir/assets" "$bin_dir/"
-fi
+  fi
 
-# --- Copy shared libs to bin -------------------------------------------------
-for d in "$root_dir/vendor/SDL3/lib64" "$root_dir/vendor/SDL3/lib" "$root_dir/vendor/SDL3_image/lib64" "$root_dir/vendor/SDL3_image/lib" "$root_dir/vendor/webgpu/lib"; do
+  # --- Copy shared libs to bin -----------------------------------------------
+  for d in "$root_dir/vendor/SDL3/lib64" "$root_dir/vendor/SDL3/lib" "$root_dir/vendor/SDL3_image/lib64" "$root_dir/vendor/SDL3_image/lib" "$root_dir/vendor/webgpu/lib"; do
     if [ -d "$d" ]; then
-        for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
-            [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
-        done
+      for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
+        [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
+      done
     fi
-done
+  done
 
-# --- Build Targets -----------------------------------------------------------
-didbuild=""
-if [ -z "${game:-}" ] && [ -z "${compdb:-}" ]; then game=1; fi
+  # --- Build Native Targets --------------------------------------------------
+  didbuild=1
 
-if [ "${game:-}" = "1" ]; then
-    didbuild=1
-    
-    echo "Building game host executable..."
-    $compile "$src_dir/app/game_main.cpp" $host_link -o "$bin_dir/game_host"
-    echo "Built $bin_dir/game_host"
-    
-    echo "Building game shared library..."
-    dll_name="$bin_dir/game_code"
-    if [ "$platform" = "macos" ]; then
-        dll_ext=".dylib"
-    else
-        dll_ext=".so"
-    fi
-    $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags -o "$bin_dir/game_code$dll_ext"
-    echo "Built $bin_dir/game_code$dll_ext"
+  echo "Building game host executable..."
+  $compile "$src_dir/app/game_main.cpp" $host_link -o "$bin_dir/game_host"
+  echo "Built $bin_dir/game_host"
+
+  echo "Building game shared library..."
+  if [ "$platform" = "macos" ]; then
+    dll_ext=".dylib"
+  else
+    dll_ext=".so"
+  fi
+  $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags -o "$bin_dir/game_code$dll_ext"
+  echo "Built $bin_dir/game_code$dll_ext"
 fi
 
-# --- Compdb ------------------------------------------------------------------
-if [ "${compdb:-}" = "1" ]; then
-    didbuild=1
-    build_log="$(mktemp)"
-    trap 'rm -f "$build_log"' EXIT
-    args="game"
-    [ "${debug:-}" = "1" ] && args="$args debug"
-    [ "${release:-}" = "1" ] && args="$args release"
-    PS4='' bash -x "$0" $args >"$build_log" 2>&1
-    compiledb -f -o "$root_dir/compile_commands.json" -p "$build_log"
-    echo "generated $root_dir/compile_commands.json"
+# --- Build Web Game (Emscripten) ---------------------------------------------
+if [ "${web:-}" = "1" ]; then
+  emsdk_dir="$vendor_dir/emsdk"
+  emsdk_env="$emsdk_dir/emsdk_env.sh"
+
+  echo "[web]"
+
+  if [ -f "$emsdk_env" ]; then
+    # shellcheck disable=SC1090
+    source "$emsdk_env"
+  fi
+
+  if ! command -v emcc >/dev/null 2>&1; then
+    echo "emcc not found. Run: ./build.sh vendor" >&2
+    exit 1
+  fi
+
+  web_common="-std=c++11 $warning_flags -I$src_dir"
+  web_common="$web_common -sUSE_SDL=3 --use-port=emdawnwebgpu -sALLOW_MEMORY_GROWTH=1"
+  web_common="$web_common -sINITIAL_MEMORY=167772160"
+  web_common="$web_common -sASYNCIFY=1"
+  web_common="$web_common -DNDEBUG -DSDL_PLATFORM_EMSCRIPTEN"
+
+  if [ "${debug:-}" = "1" ]; then
+    web_compile="emcc -g -O0 $web_common -sASSERTIONS=2"
+  else
+    web_compile="emcc -O2 $web_common"
+  fi
+
+  shell_file="$src_dir/app/game_main.html"
+  web_link="--shell-file $shell_file"
+  web_link="$web_link --preload-file $root_dir/assets@/assets"
+  web_link="$web_link --use-preload-plugins"
+  web_link="$web_link -sEXPORTED_FUNCTIONS=['_main','_malloc','_free']"
+  web_link="$web_link -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+
+  mkdir -p "$web_dir"
+
+  didbuild=1
+  $web_compile "$src_dir/app/game_main.cpp" $web_link -o "$web_dir/game.html"
+  echo "Built $web_dir/game.html"
+fi
+
+# --- Run Web Build -----------------------------------------------------------
+if [ "${run:-}" = "1" ]; then
+  if [ ! -f "$web_dir/game.html" ]; then
+    echo "game.html not found. Build first with: ./build.sh web" >&2
+    exit 1
+  fi
+  echo "serving at http://localhost:6931/game.html"
+  emrun "$web_dir/game.html"
 fi
 
 # --- Warn On No Builds -------------------------------------------------------
-if [ -z "$didbuild" ]; then
-    echo "[WARNING] no valid build target. usage: ./build.sh [vendor] [game] [debug|release] [compdb]" >&2
+if [ -z "$didbuild" ] && [ "${run:-}" != "1" ]; then
+  echo "[WARNING] no valid build target. usage: ./build.sh [vendor] [game] [web|web_run] [debug|release]" >&2
     exit 1
 fi

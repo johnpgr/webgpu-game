@@ -660,8 +660,8 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     if(atlas->atlas_width != atlas_image.width ||
        atlas->atlas_height != atlas_image.height) {
         LOG_WARN(
-            "Atlas JSON size %ux%u does not match image size %ux%u; using "
-            "image size",
+            "Atlas metadata size %ux%u does not match image size %ux%u; "
+            "using image size",
             atlas->atlas_width,
             atlas->atlas_height,
             atlas_image.width,
