@@ -1,0 +1,29 @@
+# Build outputs
+bin/
+obj/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Vendor dependencies (downloaded by ./build.sh vendor)
+vendor/webgpu/
+vendor/SDL3/
+vendor/emsdk/
+
+# Generated files
+compile_commands.json
+.cache/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Emscripten
+*.wasm
+*.js
+*.data
