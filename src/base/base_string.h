@@ -9,6 +9,7 @@ struct String {
 
 String string_substring(String source, u64 start, u64 end);
 bool string_equals(String a, String b);
+i32 string_compare(String a, String b);
 String string_lit(char const* s);
 String string_from_cstr(char const* s);
 String string_copy(Arena* arena, String source);

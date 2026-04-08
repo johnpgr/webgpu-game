@@ -54,6 +54,36 @@ if "%vendor%"=="1" (
     rmdir /s /q "%vendor_dir%\sdl3_tmp"
     echo [SDL3] Done.
 
+    :: --- SDL3_image ---
+    set SDL3_IMAGE_VERSION=3.4.2
+    set SDL3_IMAGE_BASE=https://github.com/libsdl-org/SDL_image/releases/download/release-%SDL3_IMAGE_VERSION%
+
+    echo [SDL3_image] Downloading SDL_image %SDL3_IMAGE_VERSION% for Windows...
+    if not exist "%vendor_dir%\sdl3_image_tmp" mkdir "%vendor_dir%\sdl3_image_tmp"
+
+    powershell -Command "Invoke-WebRequest -Uri '%SDL3_IMAGE_BASE%/SDL3_image-devel-%SDL3_IMAGE_VERSION%-VC.zip' -OutFile '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip'" || (
+        echo [SDL3_image] Download failed!
+        exit /b 1
+    )
+
+    echo [SDL3_image] Extracting...
+    powershell -Command "Expand-Archive -Path '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip' -DestinationPath '%vendor_dir%\sdl3_image_tmp' -Force"
+
+    :: Find extracted directory
+    for /d %%d in ("%vendor_dir%\sdl3_image_tmp\SDL3_image-devel-*") do set sdl3_image_extracted=%%d
+
+    if not exist "%vendor_dir%\SDL3_image" mkdir "%vendor_dir%\SDL3_image"
+    if exist "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\include" (
+        xcopy /s /y /q "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\include" "%vendor_dir%\SDL3_image\include\" >nul
+        xcopy /s /y /q "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\lib" "%vendor_dir%\SDL3_image\lib\" >nul
+    ) else if exist "%sdl3_image_extracted%\include" (
+        xcopy /s /y /q "%sdl3_image_extracted%\include" "%vendor_dir%\SDL3_image\include\" >nul
+        xcopy /s /y /q "%sdl3_image_extracted%\lib" "%vendor_dir%\SDL3_image\lib\" >nul
+    )
+
+    rmdir /s /q "%vendor_dir%\sdl3_image_tmp"
+    echo [SDL3_image] Done.
+
     :: --- wgpu-native (WebGPU C API) ---
     set WGPU_VERSION=27.0.4.0
     set WGPU_BASE=https://github.com/gfx-rs/wgpu-native/releases/download/v%WGPU_VERSION%
@@ -117,6 +147,7 @@ if not exist "%bin_dir%" mkdir "%bin_dir%"
 :: --- Find WebGPU + SDL3 ------------------------------------------------------
 set webgpu_dir=%root_dir%\vendor\webgpu
 set sdl3_dir=%root_dir%\vendor\SDL3
+set sdl3_image_dir=%root_dir%\vendor\SDL3_image
 
 if not exist "%webgpu_dir%\include\webgpu\webgpu.h" (
     echo WebGPU headers not found at %webgpu_dir%\include\webgpu\webgpu.h
@@ -130,12 +161,18 @@ if not exist "%sdl3_dir%\include\SDL3\SDL.h" (
     exit /b 1
 )
 
+if not exist "%sdl3_image_dir%\include\SDL3_image\SDL_image.h" (
+    echo SDL3_image not found at %sdl3_image_dir%\include\SDL3_image\SDL_image.h
+    echo Run: build vendor   to download dependencies
+    exit /b 1
+)
+
 :: --- Compile/Link Line Definitions -------------------------------------------
-set common=/std:c++11 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_dir%" /I"%webgpu_dir%\include" /I"%sdl3_dir%\include" /DSDL_PLATFORM_WIN32
+set common=/std:c++11 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_dir%" /I"%webgpu_dir%\include" /I"%sdl3_dir%\include" /I"%sdl3_image_dir%\include" /DSDL_PLATFORM_WIN32
 if "%debug%"=="1"   set compile=cl %common% /Od /Zi
 if "%release%"=="1" set compile=cl %common% /O2 /DNDEBUG
 
-set libs=/LIBPATH:"%webgpu_dir%\lib" /LIBPATH:"%sdl3_dir%\lib\x64" wgpu_native.lib SDL3.lib user32.lib gdi32.lib shell32.lib
+set libs=/LIBPATH:"%webgpu_dir%\lib" /LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
 
 :: --- Copy Assets -------------------------------------------------------------
 if exist "%root_dir%\assets" (
@@ -145,6 +182,7 @@ if exist "%root_dir%\assets" (
 :: --- Copy DLLs to bin --------------------------------------------------------
 if exist "%webgpu_dir%\lib\wgpu_native.dll" copy /y "%webgpu_dir%\lib\wgpu_native.dll" "%bin_dir%\" >nul 2>&1
 if exist "%sdl3_dir%\lib\x64\SDL3.dll" copy /y "%sdl3_dir%\lib\x64\SDL3.dll" "%bin_dir%\" >nul 2>&1
+if exist "%sdl3_image_dir%\lib\x64\SDL3_image.dll" copy /y "%sdl3_image_dir%\lib\x64\SDL3_image.dll" "%bin_dir%\" >nul 2>&1
 
 :: --- Build Targets -----------------------------------------------------------
 if "%~1"==""                      set game=1

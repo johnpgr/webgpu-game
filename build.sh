@@ -41,11 +41,10 @@ if [ "${vendor:-}" = "1" ]; then
 
   # --- SDL3 ---
   sdl3_inc="$vendor_dir/SDL3/include/SDL3/SDL.h"
-  sdl3_lib="$vendor_dir/SDL3/lib/libSDL3.a"
-  if [ ! -f "$sdl3_lib" ]; then
-    sdl3_lib="$vendor_dir/SDL3/lib64/libSDL3.a"
+  if [ -f "$vendor_dir/SDL3/lib/libSDL3.so" ] || [ -f "$vendor_dir/SDL3/lib64/libSDL3.so" ] || [ -f "$vendor_dir/SDL3/lib/libSDL3.dylib" ]; then
+    sdl3_lib_found=1
   fi
-  if [ -f "$sdl3_inc" ] && [ -f "$sdl3_lib" ]; then
+  if [ -f "$sdl3_inc" ] && [ "${sdl3_lib_found:-}" = "1" ]; then
     echo "[SDL3] Already installed, skipping..."
   else
     SDL3_VERSION="3.4.4"
@@ -56,43 +55,76 @@ if [ "${vendor:-}" = "1" ]; then
     curl -fSL -o "$vendor_dir/sdl3_tmp/sdl3.tar.gz" \
       "${SDL3_BASE}/SDL3-${SDL3_VERSION}.tar.gz"
 
-    echo "[SDL3] Extracting headers..."
+    echo "[SDL3] Extracting..."
     tar -xzf "$vendor_dir/sdl3_tmp/sdl3.tar.gz" -C "$vendor_dir/sdl3_tmp"
     sdl3_src_dir="$vendor_dir/sdl3_tmp/SDL3-${SDL3_VERSION}"
-
-    mkdir -p "$vendor_dir/SDL3/include"
-    cp -r "$sdl3_src_dir/include/SDL3" "$vendor_dir/SDL3/include/"
 
     echo "[SDL3] Building SDL3 from source (this may take a moment)..."
     build_sdl3_dir="$vendor_dir/sdl3_tmp/build"
     mkdir -p "$build_sdl3_dir"
-    if command -v cmake >/dev/null 2>&1; then
-      # Wayland-only build (disable X11 dependencies)
-      cmake -S "$sdl3_src_dir" -B "$build_sdl3_dir" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_C_FLAGS="-fPIC" \
-        -DSDL_SHARED=OFF \
-        -DSDL_STATIC=ON \
-        -DCMAKE_INSTALL_PREFIX="$vendor_dir/SDL3" \
-        -DCMAKE_PREFIX_PATH="$vendor_dir/SDL3" \
-        -DSDL_X11=OFF \
-        -DSDL_X11_XCURSOR=OFF \
-        -DSDL_X11_XDBE=OFF \
-        -DSDL_X11_XINPUT2=OFF \
-        -DSDL_X11_XRANDR=OFF \
-        -DSDL_X11_XSCRNSAVER=OFF \
-        -DSDL_X11_XSHAPE=OFF \
-        -DSDL_X11_XVM=OFF \
-        -DSDL_WAYLAND=ON
-      cmake --build "$build_sdl3_dir" --config Release -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-      cmake --install "$build_sdl3_dir" --config Release
-    else
-      echo "[SDL3] cmake not found, building via configure..."
-      (cd "$sdl3_src_dir" && ./configure --prefix="$vendor_dir/SDL3" --disable-x11 --enable-wayland --enable-static --disable-shared CFLAGS="-fPIC" && make -j"$(nproc 2>/dev/null || echo 4)" && make install)
-    fi
+    cmake -S "$sdl3_src_dir" -B "$build_sdl3_dir" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DSDL_SHARED=ON \
+      -DSDL_STATIC=OFF \
+      -DCMAKE_INSTALL_PREFIX="$vendor_dir/SDL3" \
+      -DSDL_X11=OFF \
+      -DSDL_X11_XCURSOR=OFF \
+      -DSDL_X11_XDBE=OFF \
+      -DSDL_X11_XINPUT2=OFF \
+      -DSDL_X11_XRANDR=OFF \
+      -DSDL_X11_XSCRNSAVER=OFF \
+      -DSDL_X11_XSHAPE=OFF \
+      -DSDL_X11_XVM=OFF \
+      -DSDL_WAYLAND=ON
+    cmake --build "$build_sdl3_dir" --config Release -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+    cmake --install "$build_sdl3_dir" --config Release
 
     rm -rf "$vendor_dir/sdl3_tmp"
     echo "[SDL3] Done."
+  fi
+
+  # --- SDL3_image ---
+  sdl3_image_inc="$vendor_dir/SDL3_image/include/SDL3_image/SDL_image.h"
+  if [ -f "$vendor_dir/SDL3_image/lib/libSDL3_image.so" ] || [ -f "$vendor_dir/SDL3_image/lib64/libSDL3_image.so" ] || [ -f "$vendor_dir/SDL3_image/lib/libSDL3_image.dylib" ]; then
+    sdl3_image_lib_found=1
+  fi
+  if [ -f "$sdl3_image_inc" ] && [ "${sdl3_image_lib_found:-}" = "1" ]; then
+    echo "[SDL3_image] Already installed, skipping..."
+  else
+    SDL3_IMAGE_VERSION="3.4.2"
+    SDL3_IMAGE_BASE="https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL3_IMAGE_VERSION}"
+
+    echo "[SDL3_image] Downloading SDL_image ${SDL3_IMAGE_VERSION} source..."
+    mkdir -p "$vendor_dir/sdl3_image_tmp"
+    curl -fSL -o "$vendor_dir/sdl3_image_tmp/sdl3_image.tar.gz" \
+      "${SDL3_IMAGE_BASE}/SDL3_image-${SDL3_IMAGE_VERSION}.tar.gz"
+
+    echo "[SDL3_image] Extracting..."
+    tar -xzf "$vendor_dir/sdl3_image_tmp/sdl3_image.tar.gz" -C "$vendor_dir/sdl3_image_tmp"
+    sdl3_image_src_dir="$vendor_dir/sdl3_image_tmp/SDL3_image-${SDL3_IMAGE_VERSION}"
+
+    echo "[SDL3_image] Fetching vendored dependencies..."
+    (cd "$sdl3_image_src_dir/external" && sh download.sh --depth 1)
+
+    echo "[SDL3_image] Building SDL3_image from source (this may take a moment)..."
+    build_sdl3_image_dir="$vendor_dir/sdl3_image_tmp/build"
+    mkdir -p "$build_sdl3_image_dir"
+    cmake -S "$sdl3_image_src_dir" -B "$build_sdl3_image_dir" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DSDL_SHARED=ON \
+      -DSDL_STATIC=OFF \
+      -DCMAKE_INSTALL_PREFIX="$vendor_dir/SDL3_image" \
+      -DCMAKE_PREFIX_PATH="$vendor_dir/SDL3" \
+      -DSDLIMAGE_VENDORED=ON \
+      -DSDLIMAGE_AVIF=OFF \
+      -DSDLIMAGE_JXL=OFF \
+      -DSDLIMAGE_TIF=OFF \
+      -DSDLIMAGE_WEBP=OFF
+    cmake --build "$build_sdl3_image_dir" --config Release -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+    cmake --install "$build_sdl3_image_dir" --config Release
+
+    rm -rf "$vendor_dir/sdl3_image_tmp"
+    echo "[SDL3_image] Done."
   fi
 
   # --- wgpu-native (WebGPU C API) ---
@@ -175,7 +207,7 @@ case "$(uname -s)" in
   *)      echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
 esac
 
-# --- Find WebGPU (wgpu-native) + SDL3 ----------------------------------------
+# --- Find WebGPU (wgpu-native) ------------------------------------------------
 webgpu_inc="$root_dir/vendor/webgpu/include"
 webgpu_lib="$root_dir/vendor/webgpu/lib"
 
@@ -185,27 +217,21 @@ if [ ! -f "$webgpu_inc/webgpu/webgpu.h" ]; then
     exit 1
 fi
 
+webgpu_cflags="-I$webgpu_inc"
+webgpu_libs="-L$webgpu_lib -lwgpu_native -Wl,-rpath,$webgpu_lib"
+
 # Try to find SDL3: vendor dir first, then pkg-config, then system paths
 sdl3_cflags=""
 sdl3_libs=""
 sdl3_vendor_inc="$root_dir/vendor/SDL3/include"
 sdl3_vendor_lib="$root_dir/vendor/SDL3/lib"
 sdl3_vendor_lib64="$root_dir/vendor/SDL3/lib64"
-sdl3_vendor_static=""
-
-# Look for static library in lib64 or lib
-if [ -f "$sdl3_vendor_lib64/libSDL3.a" ]; then
-    sdl3_vendor_static="$sdl3_vendor_lib64/libSDL3.a"
-elif [ -f "$sdl3_vendor_lib/libSDL3.a" ]; then
-    sdl3_vendor_static="$sdl3_vendor_lib/libSDL3.a"
-fi
 
 if [ -f "$sdl3_vendor_inc/SDL3/SDL.h" ]; then
     sdl3_cflags="-I$sdl3_vendor_inc"
-    # Prefer static library if available
-    if [ -n "$sdl3_vendor_static" ]; then
-        sdl3_libs="$sdl3_vendor_static"
-    else
+    if [ -f "$sdl3_vendor_lib64/libSDL3.so" ] || [ -f "$sdl3_vendor_lib64/libSDL3.dylib" ]; then
+        sdl3_libs="-L$sdl3_vendor_lib64 -lSDL3 -Wl,-rpath,$sdl3_vendor_lib64"
+    elif [ -f "$sdl3_vendor_lib/libSDL3.so" ] || [ -f "$sdl3_vendor_lib/libSDL3.dylib" ]; then
         sdl3_libs="-L$sdl3_vendor_lib -lSDL3 -Wl,-rpath,$sdl3_vendor_lib"
     fi
 elif pkg-config --exists sdl3 2>/dev/null; then
@@ -231,9 +257,46 @@ if [ -z "$sdl3_cflags" ] || [ -z "$sdl3_libs" ]; then
     exit 1
 fi
 
+# --- Find SDL3_image ---------------------------------------------------------
+sdl3_image_cflags=""
+sdl3_image_libs=""
+sdl3_image_vendor_inc="$root_dir/vendor/SDL3_image/include"
+sdl3_image_vendor_lib="$root_dir/vendor/SDL3_image/lib"
+sdl3_image_vendor_lib64="$root_dir/vendor/SDL3_image/lib64"
+
+if [ -f "$sdl3_image_vendor_inc/SDL3_image/SDL_image.h" ]; then
+    sdl3_image_cflags="-I$sdl3_image_vendor_inc"
+    if [ -f "$sdl3_image_vendor_lib64/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib64/libSDL3_image.dylib" ]; then
+        sdl3_image_libs="-L$sdl3_image_vendor_lib64 -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib64"
+    elif [ -f "$sdl3_image_vendor_lib/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib/libSDL3_image.dylib" ]; then
+        sdl3_image_libs="-L$sdl3_image_vendor_lib -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib"
+    fi
+elif pkg-config --exists sdl3-image 2>/dev/null; then
+    sdl3_image_cflags=$(pkg-config --cflags sdl3-image)
+    sdl3_image_libs=$(pkg-config --libs sdl3-image)
+else
+    for d in /usr/local/include /opt/homebrew/include /usr/include; do
+        if [ -f "$d/SDL3_image/SDL_image.h" ]; then
+            sdl3_image_cflags="-I$d"
+            break
+        fi
+    done
+    for d in /usr/local/lib /opt/homebrew/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
+        if [ -f "$d/libSDL3_image.so" ] || [ -f "$d/libSDL3_image.dylib" ]; then
+            sdl3_image_libs="-L$d -lSDL3_image"
+            break
+        fi
+    done
+fi
+
+if [ -z "$sdl3_image_cflags" ] || [ -z "$sdl3_image_libs" ]; then
+    echo "SDL3_image not found. Run: ./build.sh vendor" >&2
+    exit 1
+fi
+
 # --- Compile/Link Line Definitions -------------------------------------------
 compiler="${CXX:-clang++}"
-common="-std=c++11 -Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -I$src_dir -I$webgpu_inc"
+common="-std=c++11 -Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -I$src_dir $webgpu_cflags"
 
 if [ "$platform" = "macos" ]; then
     common="$common -DSDL_PLATFORM_MACOS"
@@ -243,10 +306,10 @@ else
     link_os="-ldl -lm -lX11 -lXrandr"
 fi
 
-if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common $sdl3_cflags"; fi
-if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags"; fi
+if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common $sdl3_cflags $sdl3_image_cflags"; fi
+if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags $sdl3_image_cflags"; fi
 
-link="$webgpu_lib/libwgpu_native.a $sdl3_libs $link_os -lpthread"
+link="$webgpu_libs $sdl3_image_libs $sdl3_libs $link_os -lpthread"
 
 # --- Prep Directories --------------------------------------------------------
 mkdir -p "$bin_dir"
@@ -255,6 +318,15 @@ mkdir -p "$bin_dir"
 if [ -d "$root_dir/assets" ]; then
     cp -r "$root_dir/assets" "$bin_dir/"
 fi
+
+# --- Copy shared libs to bin -------------------------------------------------
+for d in "$root_dir/vendor/SDL3/lib64" "$root_dir/vendor/SDL3/lib" "$root_dir/vendor/SDL3_image/lib64" "$root_dir/vendor/SDL3_image/lib" "$root_dir/vendor/webgpu/lib"; do
+    if [ -d "$d" ]; then
+        for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
+            [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
+        done
+    fi
+done
 
 # --- Build Targets -----------------------------------------------------------
 didbuild=""

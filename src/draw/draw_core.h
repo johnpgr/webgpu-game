@@ -2,42 +2,33 @@
 
 #include "base/base_arena.h"
 
-enum CmdType : u32 {
-    CmdType_None,
-    CmdType_Clear,
-    CmdType_Rect,
-};
-
-struct PushCmd {
-    CmdType type;
-    u32 size;
-};
-
-struct CmdClear {
-    PushCmd header;
-    vec4 color;
-};
-
-struct CmdRect {
-    PushCmd header;
-    vec2 center;
+struct SpriteInstance {
+    vec2 uv_min;
+    vec2 uv_max;
+    vec2 position;
     vec2 size;
-    vec4 color;
+    f32 depth;
+    vec4 tint;
+};
+static_assert(sizeof(SpriteInstance) == 52, "SpriteInstance must be 52 bytes");
+
+struct FrameState {
+    vec4 clear_color;
+    vec2 camera_pos;
+    f32 camera_zoom;
+    SpriteInstance* sprites;
+    u32 sprite_count;
+    u32 sprite_capacity;
 };
 
-struct PushCmdBuffer {
-    u8* base;
-    u32 capacity;
-    u32 used;
-    u32 cmd_count;
-};
-
-PushCmdBuffer create_push_cmd_buffer(Arena* arena, u32 capacity);
-void push_cmd_buffer_reset(PushCmdBuffer* buffer);
-void push_clear(PushCmdBuffer* buffer, vec4 color);
-void push_rect(
-    PushCmdBuffer* buffer,
-    vec2 center,
+FrameState create_frame_state(Arena* arena, u32 initial_capacity);
+void frame_state_reset(FrameState* frame);
+void push_sprite(
+    FrameState* frame,
+    vec2 uv_min,
+    vec2 uv_max,
+    vec2 position,
     vec2 size,
-    vec4 color
+    f32 depth,
+    vec4 tint
 );

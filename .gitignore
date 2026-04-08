@@ -11,6 +11,7 @@ obj/
 # Vendor dependencies (downloaded by ./build.sh vendor)
 vendor/webgpu/
 vendor/SDL3/
+vendor/SDL3_image/
 vendor/emsdk/
 
 # Generated files

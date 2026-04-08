@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/base_core.h"
+#include "os/os_file.h"
 
 void* reserve_system_memory(u64 size);
 u64 get_system_page_size(void);

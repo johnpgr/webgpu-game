@@ -7,6 +7,7 @@
 #include "base/base_mod.cpp"
 #include "os/os_mod.cpp"
 #include "draw/draw_mod.cpp"
+#include "assets/assets_mod.cpp"
 #include "game/game_mod.cpp"
 #include "render/render_mod.cpp"
 
@@ -46,12 +47,12 @@ internal void app_tick(void* arg) {
     }
 
     // Update game
-    f64 dt = 1.0 / 60.0;  // Fixed timestep for now
+    f64 dt = 1.0 / 60.0; // Fixed timestep for now
     game_update(app->game, dt);
 
     // Render
     if(begin_frame(&app->renderer, app->width, app->height)) {
-        render_submit(&app->renderer, &app->game->cmd_buffer);
+        render_submit(&app->renderer, &app->game->frame);
         end_frame(&app->renderer);
     }
 
@@ -75,7 +76,7 @@ int main(int argc, char** argv) {
     // Create arena
     Arena* arena = arena_alloc(
 #if OS_EMSCRIPTEN
-        4 * MB,  // Smaller arena for Emscripten
+        4 * MB, // Smaller arena for Emscripten
         64 * KB
 #else
         64 * MB,
@@ -90,7 +91,7 @@ int main(int argc, char** argv) {
     app.height = 540;
 
     // Create window
-    Uint64 window_flags = SDL_WINDOW_RESIZABLE;
+    u64 window_flags = 0;
 #if !OS_EMSCRIPTEN
     window_flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
@@ -114,15 +115,22 @@ int main(int argc, char** argv) {
     app.height = (u32)ph;
 #endif
 
+    Atlas* atlas = push_struct(arena, Atlas);
+    *atlas = atlas_load(
+        arena,
+        "assets/sprites/atlas.json",
+        "assets/sprites/atlas.png"
+    );
+
     // Initialize WebGPU
-    app.renderer = init_webgpu(app.window);
+    app.renderer = init_webgpu(app.window, arena, atlas);
     if(!app.renderer.internal_state) {
         LOG_FATAL("Failed to initialize WebGPU renderer");
         return 1;
     }
 
     // Initialize game
-    app.game = init_game_state(arena);
+    app.game = init_game_state(arena, atlas);
 
     LOG_INFO("WebGPU Game started (%dx%d)", app.width, app.height);
 

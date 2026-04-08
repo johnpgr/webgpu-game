@@ -25,6 +25,24 @@ bool string_equals(String a, String b) {
     return memcmp(a.str, b.str, a.size) == 0;
 }
 
+i32 string_compare(String a, String b) {
+    u64 min_size = a.size < b.size ? a.size : b.size;
+    if(min_size > 0) {
+        int cmp = memcmp(a.str, b.str, min_size);
+        if(cmp != 0) {
+            return cmp;
+        }
+    }
+
+    if(a.size < b.size) {
+        return -1;
+    }
+    if(a.size > b.size) {
+        return 1;
+    }
+    return 0;
+}
+
 String string_lit(char const* s) {
     ASSERT(s != nullptr, "String literal source must not be null!");
     String result = {(u8 const*)s, (u64)strlen(s)};
