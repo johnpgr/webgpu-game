@@ -1,7 +1,0 @@
-CompileFlags:
-  Add:
-    - "-std=c++11"
-    - "-I/home/joao/dev/webgpu-game/src"
-    - "-I/home/joao/dev/webgpu-game/vendor/webgpu/include"
-    - "-I/home/joao/dev/webgpu-game/vendor/SDL3/include"
-    - "-DSDL_PLATFORM_LINUX"

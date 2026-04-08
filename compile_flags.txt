@@ -1,0 +1,7 @@
+-std=c++20
+-Isrc
+-Ivendor/webgpu/include
+-Ivendor/SDL3/include
+-Ivendor/SDL3_image/include
+-DSDL_PLATFORM_WIN32
+-DOS_EMSCRIPTEN=0
