@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
     app.perf_frequency = SDL_GetPerformanceFrequency();
 
     // Create window
-    u64 window_flags = 0;
+    u64 window_flags = SDL_WINDOW_HIDDEN;
 #if !OS_EMSCRIPTEN
     window_flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
@@ -221,6 +221,7 @@ int main(int argc, char** argv) {
     app.game = init_game_state(arena, atlas);
 
     LOG_INFO("WebGPU Game started (%dx%d)", app.width, app.height);
+    SDL_ShowWindow(app.window);
 
     // Main loop
 #if OS_EMSCRIPTEN

@@ -26,29 +26,29 @@ if "%vendor%"=="1" (
 
     :: --- SDL3 ---
     set SDL3_VERSION=3.4.4
-    set SDL3_BASE=https://github.com/libsdl-org/SDL/releases/download/release-%SDL3_VERSION%
+    set SDL3_BASE=https://github.com/libsdl-org/SDL/releases/download/release-!SDL3_VERSION!
 
-    echo [SDL3] Downloading SDL %SDL3_VERSION% for Windows...
+    echo [SDL3] Downloading SDL !SDL3_VERSION! for Windows...
     if not exist "%vendor_dir%\sdl3_tmp" mkdir "%vendor_dir%\sdl3_tmp"
 
-    powershell -Command "Invoke-WebRequest -Uri '%SDL3_BASE%/SDL3-devel-%SDL3_VERSION%-VC.zip' -OutFile '%vendor_dir%\sdl3_tmp\sdl3.zip'" || (
+    powershell -Command "Invoke-WebRequest -Uri '!SDL3_BASE!/SDL3-devel-!SDL3_VERSION!-VC.zip' -OutFile '%vendor_dir%\sdl3_tmp\sdl3.zip'" || (
         echo [SDL3] Download failed!
         exit /b 1
     )
 
     echo [SDL3] Extracting...
-    powershell -Command "Expand-Archive -Path '%vendor_dir%\sdl3_tmp\sdl3.zip' -DestinationPath '%vendor_dir%\sdl3_tmp' -Force"
+    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\sdl3_tmp\sdl3.zip', '%vendor_dir%\sdl3_tmp')"
 
     :: Find extracted directory
-    for /d %%d in ("%vendor_dir%\sdl3_tmp\SDL3-devel-*") do set sdl3_extracted=%%d
+    for /d %%d in ("%vendor_dir%\sdl3_tmp\SDL3-*") do set sdl3_extracted=%%d
 
     if not exist "%vendor_dir%\SDL3" mkdir "%vendor_dir%\SDL3"
-    if exist "%sdl3_extracted%\SDL3-%SDL3_VERSION%\include" (
-        xcopy /s /y /q "%sdl3_extracted%\SDL3-%SDL3_VERSION%\include" "%vendor_dir%\SDL3\include\" >nul
-        xcopy /s /y /q "%sdl3_extracted%\SDL3-%SDL3_VERSION%\lib" "%vendor_dir%\SDL3\lib\" >nul
-    ) else if exist "%sdl3_extracted%\include" (
-        xcopy /s /y /q "%sdl3_extracted%\include" "%vendor_dir%\SDL3\include\" >nul
-        xcopy /s /y /q "%sdl3_extracted%\lib" "%vendor_dir%\SDL3\lib\" >nul
+    if exist "!sdl3_extracted!\SDL3-!SDL3_VERSION!\include" (
+        xcopy /s /y /q "!sdl3_extracted!\SDL3-!SDL3_VERSION!\include" "%vendor_dir%\SDL3\include\" >nul
+        xcopy /s /y /q "!sdl3_extracted!\SDL3-!SDL3_VERSION!\lib" "%vendor_dir%\SDL3\lib\" >nul
+    ) else if exist "!sdl3_extracted!\include" (
+        xcopy /s /y /q "!sdl3_extracted!\include" "%vendor_dir%\SDL3\include\" >nul
+        xcopy /s /y /q "!sdl3_extracted!\lib" "%vendor_dir%\SDL3\lib\" >nul
     )
 
     rmdir /s /q "%vendor_dir%\sdl3_tmp"
@@ -56,29 +56,29 @@ if "%vendor%"=="1" (
 
     :: --- SDL3_image ---
     set SDL3_IMAGE_VERSION=3.4.2
-    set SDL3_IMAGE_BASE=https://github.com/libsdl-org/SDL_image/releases/download/release-%SDL3_IMAGE_VERSION%
+    set SDL3_IMAGE_BASE=https://github.com/libsdl-org/SDL_image/releases/download/release-!SDL3_IMAGE_VERSION!
 
-    echo [SDL3_image] Downloading SDL_image %SDL3_IMAGE_VERSION% for Windows...
+    echo [SDL3_image] Downloading SDL_image !SDL3_IMAGE_VERSION! for Windows...
     if not exist "%vendor_dir%\sdl3_image_tmp" mkdir "%vendor_dir%\sdl3_image_tmp"
 
-    powershell -Command "Invoke-WebRequest -Uri '%SDL3_IMAGE_BASE%/SDL3_image-devel-%SDL3_IMAGE_VERSION%-VC.zip' -OutFile '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip'" || (
+    powershell -Command "Invoke-WebRequest -Uri '!SDL3_IMAGE_BASE!/SDL3_image-devel-!SDL3_IMAGE_VERSION!-VC.zip' -OutFile '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip'" || (
         echo [SDL3_image] Download failed!
         exit /b 1
     )
 
     echo [SDL3_image] Extracting...
-    powershell -Command "Expand-Archive -Path '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip' -DestinationPath '%vendor_dir%\sdl3_image_tmp' -Force"
+    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\sdl3_image_tmp\sdl3_image.zip', '%vendor_dir%\sdl3_image_tmp')"
 
     :: Find extracted directory
-    for /d %%d in ("%vendor_dir%\sdl3_image_tmp\SDL3_image-devel-*") do set sdl3_image_extracted=%%d
+    for /d %%d in ("%vendor_dir%\sdl3_image_tmp\SDL3_image-*") do set sdl3_image_extracted=%%d
 
     if not exist "%vendor_dir%\SDL3_image" mkdir "%vendor_dir%\SDL3_image"
-    if exist "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\include" (
-        xcopy /s /y /q "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\include" "%vendor_dir%\SDL3_image\include\" >nul
-        xcopy /s /y /q "%sdl3_image_extracted%\SDL3_image-%SDL3_IMAGE_VERSION%\lib" "%vendor_dir%\SDL3_image\lib\" >nul
-    ) else if exist "%sdl3_image_extracted%\include" (
-        xcopy /s /y /q "%sdl3_image_extracted%\include" "%vendor_dir%\SDL3_image\include\" >nul
-        xcopy /s /y /q "%sdl3_image_extracted%\lib" "%vendor_dir%\SDL3_image\lib\" >nul
+    if exist "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\include" (
+        xcopy /s /y /q "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\include" "%vendor_dir%\SDL3_image\include\" >nul
+        xcopy /s /y /q "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\lib" "%vendor_dir%\SDL3_image\lib\" >nul
+    ) else if exist "!sdl3_image_extracted!\include" (
+        xcopy /s /y /q "!sdl3_image_extracted!\include" "%vendor_dir%\SDL3_image\include\" >nul
+        xcopy /s /y /q "!sdl3_image_extracted!\lib" "%vendor_dir%\SDL3_image\lib\" >nul
     )
 
     rmdir /s /q "%vendor_dir%\sdl3_image_tmp"
@@ -86,38 +86,42 @@ if "%vendor%"=="1" (
 
     :: --- wgpu-native (WebGPU C API) ---
     set WGPU_VERSION=27.0.4.0
-    set WGPU_BASE=https://github.com/gfx-rs/wgpu-native/releases/download/v%WGPU_VERSION%
+    set WGPU_BASE=https://github.com/gfx-rs/wgpu-native/releases/download/v!WGPU_VERSION!
 
-    if "%dl_arch%"=="x64" (
+    if "!dl_arch!"=="x64" (
         set wgpu_artifact=wgpu-windows-x86_64-msvc-release.zip
-    ) else if "%dl_arch%"=="arm64" (
+    ) else if "!dl_arch!"=="arm64" (
         set wgpu_artifact=wgpu-windows-aarch64-msvc-release.zip
     ) else (
         set wgpu_artifact=wgpu-windows-i686-msvc-release.zip
     )
 
-    echo [wgpu-native] Downloading wgpu-native v%WGPU_VERSION%...
+    echo [wgpu-native] Downloading wgpu-native v!WGPU_VERSION!...
     if not exist "%vendor_dir%\wgpu_tmp" mkdir "%vendor_dir%\wgpu_tmp"
 
-    powershell -Command "Invoke-WebRequest -Uri '%WGPU_BASE%/%wgpu_artifact%' -OutFile '%vendor_dir%\wgpu_tmp\wgpu.zip'" || (
+    powershell -Command "Invoke-WebRequest -Uri '!WGPU_BASE!/!wgpu_artifact!' -OutFile '%vendor_dir%\wgpu_tmp\wgpu.zip'" || (
         echo [wgpu-native] Download failed!
         exit /b 1
     )
 
     echo [wgpu-native] Extracting...
-    powershell -Command "Expand-Archive -Path '%vendor_dir%\wgpu_tmp\wgpu.zip' -DestinationPath '%vendor_dir%\wgpu_tmp\extracted' -Force"
+    if not exist "%vendor_dir%\wgpu_tmp\extracted" mkdir "%vendor_dir%\wgpu_tmp\extracted"
+    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\wgpu_tmp\wgpu.zip', '%vendor_dir%\wgpu_tmp\extracted')"
 
-    :: Find extracted directory
-    set wgpu_inner=
-    for /d %%d in ("%vendor_dir%\wgpu_tmp\extracted\*") do set wgpu_inner=%%d
-    if "!wgpu_inner!"=="" set wgpu_inner=%vendor_dir%\wgpu_tmp\extracted
+    :: Find extracted directory - wgpu extracts directly without a wrapper dir
+    set wgpu_inner=%vendor_dir%\wgpu_tmp\extracted
+    if not exist "!wgpu_inner!\include\webgpu\webgpu.h" (
+        for /d %%d in ("!wgpu_inner!\*") do (
+            if exist "%%d\include\webgpu\webgpu.h" set wgpu_inner=%%d
+        )
+    )
 
     if not exist "%vendor_dir%\webgpu\include\webgpu" mkdir "%vendor_dir%\webgpu\include\webgpu"
     if not exist "%vendor_dir%\webgpu\lib" mkdir "%vendor_dir%\webgpu\lib"
 
     :: Copy headers
-    if exist "!wgpu_inner!\include\webgpu\webgpu.h" (
-        copy /y "!wgpu_inner!\include\webgpu\webgpu.h" "%vendor_dir%\webgpu\include\webgpu\" >nul
+    if exist "!wgpu_inner!\include\webgpu" (
+        xcopy /y "!wgpu_inner!\include\webgpu\*" "%vendor_dir%\webgpu\include\webgpu\" >nul
     ) else if exist "!wgpu_inner!\webgpu.h" (
         copy /y "!wgpu_inner!\webgpu.h" "%vendor_dir%\webgpu\include\webgpu\" >nul
     )
@@ -168,7 +172,7 @@ if not exist "%sdl3_image_dir%\include\SDL3_image\SDL_image.h" (
 )
 
 :: --- Compile/Link Line Definitions -------------------------------------------
-set common=/std:c++11 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_dir%" /I"%webgpu_dir%\include" /I"%sdl3_dir%\include" /I"%sdl3_image_dir%\include" /DSDL_PLATFORM_WIN32
+set common=/std:c++20 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_dir%" /I"%webgpu_dir%\include" /I"%sdl3_dir%\include" /I"%sdl3_image_dir%\include" /DSDL_PLATFORM_WIN32
 if "%debug%"=="1"   set compile=cl %common% /Od /Zi
 if "%release%"=="1" set compile=cl %common% /O2 /DNDEBUG
 

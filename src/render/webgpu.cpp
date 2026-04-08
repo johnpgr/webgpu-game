@@ -10,6 +10,14 @@
 #if defined(SDL_PLATFORM_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#pragma comment(lib, "ntdll.lib")
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
+#pragma comment(lib, "propsys.lib")
+#pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "userenv.lib")
+#pragma comment(lib, "runtimeobject.lib")
 #endif
 
 #if OS_EMSCRIPTEN
@@ -229,10 +237,12 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
         LOG_ERROR("Failed to create Emscripten surface for canvas '#canvas'");
     }
     return surface;
-#endif
-
+#else
+    (void)instance;
+    (void)window;
     LOG_FATAL("Failed to create WebGPU surface: unsupported platform");
     return nullptr;
+#endif
 }
 
 static void wgpu_request_adapter_callback(
@@ -865,6 +875,9 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
         wgpuDeviceCreateRenderPipeline(state->device, &pipeline_desc);
 
     result.internal_state = state;
+#if !OS_EMSCRIPTEN
+    wgpuDevicePoll(state->device, true, nullptr);
+#endif
     return result;
 }
 
