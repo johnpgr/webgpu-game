@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r vendor/linux-x64/SDL3/include/SDL3 vendor/include/)",
+      "Bash(cp -r vendor/linux-x64/SDL3_image/include/SDL3_image vendor/include/)",
+      "Bash(cp -r vendor/linux-x64/webgpu/include/webgpu vendor/include/)"
+    ]
+  }
+}

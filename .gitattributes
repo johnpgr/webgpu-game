@@ -1,6 +1,8 @@
+vendor/lib/**/*.dll filter=lfs diff=lfs merge=lfs -text
 vendor/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
 vendor/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
-vendor/lib/**/*.dll filter=lfs diff=lfs merge=lfs -text
+ve[[:space:]]ndor/lib/**/*.pdb filter=lfs diff=lfs merge=lfs -text
+vendor/lib/**/*.so filter=lfs diff=lfs merge=lfs -text
 vendor/lib/**/*.pdb filter=lfs diff=lfs merge=lfs -text
 vendor/lib/**/*.so* filter=lfs diff=lfs merge=lfs -text
 **/*.lib filter=lfs diff=lfs merge=lfs -text
