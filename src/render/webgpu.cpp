@@ -145,9 +145,8 @@ static void wgpu_device_lost_callback(
 }
 
 static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
-    SDL_PropertiesID props = SDL_GetWindowProperties(window);
-
 #if defined(SDL_PLATFORM_WIN32)
+    SDL_PropertiesID props = SDL_GetWindowProperties(window);
     WGPUSurfaceSourceWindowsHWND from_hwnd = {};
     from_hwnd.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
     from_hwnd.hwnd = SDL_GetPointerProperty(
@@ -161,6 +160,7 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
     desc.nextInChain = &from_hwnd.chain;
     return wgpuInstanceCreateSurface(instance, &desc);
 #elif defined(SDL_PLATFORM_LINUX)
+    SDL_PropertiesID props = SDL_GetWindowProperties(window);
     void* wayland_display = SDL_GetPointerProperty(
         props,
         SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,
@@ -202,6 +202,7 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
         return wgpuInstanceCreateSurface(instance, &desc);
     }
 #elif defined(SDL_PLATFORM_MACOS)
+    SDL_PropertiesID props = SDL_GetWindowProperties(window);
     WGPUSurfaceSourceMetalLayer from_metal = {};
     from_metal.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
     from_metal.layer = SDL_GetPointerProperty(
@@ -216,6 +217,7 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
         return wgpuInstanceCreateSurface(instance, &desc);
     }
 #elif OS_EMSCRIPTEN
+    (void)window;
     WGPUEmscriptenSurfaceSourceCanvasHTMLSelector from_canvas =
         WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
     from_canvas.selector = {"#canvas", WGPU_STRLEN};
@@ -338,6 +340,145 @@ static void ensure_instance_buffer(WebGPUState* state, u32 required) {
     state->instance_buffer_capacity = new_capacity;
 }
 
+static void write_world_camera_uniform(
+    WebGPUState* state,
+    WorldCamera const* camera,
+    u32 surface_width,
+    u32 surface_height
+) {
+    f32 hw = (f32)surface_width * 0.5f;
+    f32 hh = (f32)surface_height * 0.5f;
+    f32 z = camera->zoom;
+    f32 l = camera->position.x - hw / z;
+    f32 r = camera->position.x + hw / z;
+    f32 b = camera->position.y - hh / z;
+    f32 t = camera->position.y + hh / z;
+
+    CameraUniform uniform = {};
+    uniform.mvp[0] = 2.0f / (r - l);
+    uniform.mvp[5] = 2.0f / (t - b);
+    uniform.mvp[10] = 1.0f;
+    uniform.mvp[12] = -(r + l) / (r - l);
+    uniform.mvp[13] = -(t + b) / (t - b);
+    uniform.mvp[15] = 1.0f;
+
+    wgpuQueueWriteBuffer(
+        state->queue,
+        state->uniform_buffer,
+        0,
+        &uniform,
+        sizeof(uniform)
+    );
+}
+
+static void upload_world_sprites(
+    WebGPUState* state,
+    WorldSpritePass const* sprite_pass
+) {
+    if(sprite_pass->sprite_count == 0) {
+        return;
+    }
+
+    ensure_instance_buffer(state, sprite_pass->sprite_count);
+    wgpuQueueWriteBuffer(
+        state->queue,
+        state->instance_buffer,
+        0,
+        sprite_pass->sprites,
+        (size_t)((u64)sizeof(SpriteInstance) * (u64)sprite_pass->sprite_count)
+    );
+}
+
+static void render_backgrounds(
+    WebGPUState* state,
+    WGPURenderPassEncoder pass,
+    BackgroundPass const* backgrounds
+) {
+    (void)state;
+    (void)pass;
+    (void)backgrounds;
+}
+
+static void render_world_sprites(
+    WebGPUState* state,
+    WGPURenderPassEncoder pass,
+    WorldSpritePass const* sprite_pass
+) {
+    if(sprite_pass->sprite_count == 0) {
+        return;
+    }
+
+    write_world_camera_uniform(
+        state,
+        &sprite_pass->camera,
+        state->surface_width,
+        state->surface_height
+    );
+    upload_world_sprites(state, sprite_pass);
+
+    wgpuRenderPassEncoderSetPipeline(pass, state->render_pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, state->bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetVertexBuffer(
+        pass,
+        0,
+        state->vertex_buffer,
+        0,
+        sizeof(f32) * 8
+    );
+    wgpuRenderPassEncoderSetVertexBuffer(
+        pass,
+        1,
+        state->instance_buffer,
+        0,
+        (u64)sizeof(SpriteInstance) * (u64)sprite_pass->sprite_count
+    );
+    wgpuRenderPassEncoderSetIndexBuffer(
+        pass,
+        state->index_buffer,
+        WGPUIndexFormat_Uint16,
+        0,
+        sizeof(u16) * 6
+    );
+    wgpuRenderPassEncoderDrawIndexed(
+        pass,
+        6,
+        sprite_pass->sprite_count,
+        0,
+        0,
+        0
+    );
+}
+
+static void render_text(
+    WebGPUState* state,
+    WGPURenderPassEncoder pass,
+    TextPass const* text
+) {
+    (void)state;
+    (void)pass;
+    (void)text;
+}
+
+static void render_ui(
+    WebGPUState* state,
+    WGPURenderPassEncoder pass,
+    UiPass const* ui
+) {
+    (void)state;
+    (void)pass;
+    (void)ui;
+}
+
+static void render_debug(
+    WebGPUState* state,
+    WGPURenderPassEncoder pass,
+    DebugPass const* debug
+) {
+    (void)state;
+    (void)pass;
+    (void)debug;
+}
+
 static void configure_surface(WebGPUState* state) {
     if(!state->surface || !state->device) {
         return;
@@ -367,7 +508,7 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     ASSERT(window != nullptr, "Window must not be null!");
     ASSERT(arena != nullptr, "Arena must not be null!");
     ASSERT(atlas != nullptr, "Atlas must not be null!");
-    ASSERT(atlas->pixel_data != nullptr, "Atlas pixel data must not be null!");
+    ASSERT(atlas->image_path != nullptr, "Atlas image path must not be null!");
 
     WebGPUState* state = push_struct(arena, WebGPUState);
 
@@ -476,6 +617,29 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     state->shader_module =
         wgpuDeviceCreateShaderModule(state->device, &shader_desc);
 
+    Temp atlas_upload_temp = temp_begin(arena);
+    AtlasImage atlas_image = atlas_load_image(arena, atlas->image_path);
+    if(atlas_image.pixels == nullptr || atlas_image.width == 0 ||
+       atlas_image.height == 0) {
+        temp_end(atlas_upload_temp);
+        LOG_FATAL("Failed to load atlas image for GPU upload");
+        return result;
+    }
+
+    if(atlas->atlas_width != atlas_image.width ||
+       atlas->atlas_height != atlas_image.height) {
+        LOG_WARN(
+            "Atlas JSON size %ux%u does not match image size %ux%u; using "
+            "image size",
+            atlas->atlas_width,
+            atlas->atlas_height,
+            atlas_image.width,
+            atlas_image.height
+        );
+        atlas->atlas_width = atlas_image.width;
+        atlas->atlas_height = atlas_image.height;
+    }
+
     WGPUTextureDescriptor atlas_desc = {};
     atlas_desc.usage =
         WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
@@ -501,11 +665,12 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     wgpuQueueWriteTexture(
         state->queue,
         &atlas_dst,
-        atlas->pixel_data,
+        atlas_image.pixels,
         (size_t)((u64)atlas->atlas_width * (u64)atlas->atlas_height * 4ULL),
         &atlas_layout,
         &atlas_size
     );
+    temp_end(atlas_upload_temp);
 
     state->atlas_view = wgpuTextureCreateView(state->atlas_texture, nullptr);
 
@@ -832,7 +997,7 @@ bool begin_frame(WebGPURenderer* renderer, u32 width, u32 height) {
     return true;
 }
 
-void render_submit(WebGPURenderer* renderer, FrameState* frame) {
+void render_submit(WebGPURenderer* renderer, RenderFrame* frame) {
     if(!renderer || !renderer->internal_state || !frame) {
         return;
     }
@@ -840,40 +1005,6 @@ void render_submit(WebGPURenderer* renderer, FrameState* frame) {
     WebGPUState* state = (WebGPUState*)renderer->internal_state;
     if(!state->current_view || !state->depth_view) {
         return;
-    }
-
-    f32 hw = (f32)state->surface_width * 0.5f;
-    f32 hh = (f32)state->surface_height * 0.5f;
-    f32 z = frame->camera_zoom;
-    f32 l = frame->camera_pos.x - hw / z;
-    f32 r = frame->camera_pos.x + hw / z;
-    f32 b = frame->camera_pos.y - hh / z;
-    f32 t = frame->camera_pos.y + hh / z;
-
-    CameraUniform camera = {};
-    camera.mvp[0] = 2.0f / (r - l);
-    camera.mvp[5] = 2.0f / (t - b);
-    camera.mvp[10] = 1.0f;
-    camera.mvp[12] = -(r + l) / (r - l);
-    camera.mvp[13] = -(t + b) / (t - b);
-    camera.mvp[15] = 1.0f;
-    wgpuQueueWriteBuffer(
-        state->queue,
-        state->uniform_buffer,
-        0,
-        &camera,
-        sizeof(camera)
-    );
-
-    if(frame->sprite_count > 0) {
-        ensure_instance_buffer(state, frame->sprite_count);
-        wgpuQueueWriteBuffer(
-            state->queue,
-            state->instance_buffer,
-            0,
-            frame->sprites,
-            (size_t)((u64)sizeof(SpriteInstance) * (u64)frame->sprite_count)
-        );
     }
 
     WGPUCommandEncoderDescriptor encoder_desc = {};
@@ -910,38 +1041,11 @@ void render_submit(WebGPURenderer* renderer, FrameState* frame) {
     WGPURenderPassEncoder pass =
         wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
 
-    if(frame->sprite_count > 0) {
-        wgpuRenderPassEncoderSetPipeline(pass, state->render_pipeline);
-        wgpuRenderPassEncoderSetBindGroup(
-            pass,
-            0,
-            state->bind_group,
-            0,
-            nullptr
-        );
-        wgpuRenderPassEncoderSetVertexBuffer(
-            pass,
-            0,
-            state->vertex_buffer,
-            0,
-            sizeof(f32) * 8
-        );
-        wgpuRenderPassEncoderSetVertexBuffer(
-            pass,
-            1,
-            state->instance_buffer,
-            0,
-            (u64)sizeof(SpriteInstance) * (u64)frame->sprite_count
-        );
-        wgpuRenderPassEncoderSetIndexBuffer(
-            pass,
-            state->index_buffer,
-            WGPUIndexFormat_Uint16,
-            0,
-            sizeof(u16) * 6
-        );
-        wgpuRenderPassEncoderDrawIndexed(pass, 6, frame->sprite_count, 0, 0, 0);
-    }
+    render_backgrounds(state, pass, &frame->backgrounds);
+    render_world_sprites(state, pass, &frame->world_sprites);
+    render_text(state, pass, &frame->text);
+    render_ui(state, pass, &frame->ui);
+    render_debug(state, pass, &frame->debug);
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WebGPU Game</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #14141f;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      canvas {
+        display: block;
+        border: 0;
+        background: #14141f;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <script type="text/javascript">
+      const canvasElement = document.getElementById('canvas');
+
+#if MODULARIZE && !EXPORT_ES6
+      var moduleArgs = {
+#else
+      var Module = {
+#endif
+        print(...args) {
+          console.log(...args);
+        },
+        canvas: canvasElement,
+        setStatus(text) {
+          if (text) {
+            console.log(text);
+          }
+        },
+        monitorRunDependencies() {}
+      };
+
+      window.onerror = (message) => {
+        console.error(message);
+      };
+    </script>
+    {{{ SCRIPT }}}
+#if MODULARIZE && !EXPORT_ES6
+    <script type="text/javascript">
+      {{{ EXPORT_NAME }}}(moduleArgs);
+    </script>
+#endif
+  </body>
+</html>

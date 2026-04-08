@@ -15,5 +15,5 @@ void cleanup_webgpu(WebGPURenderer* renderer);
 
 // Returns false if surface is lost/invalid (should resize/recreate)
 bool begin_frame(WebGPURenderer* renderer, u32 width, u32 height);
-void render_submit(WebGPURenderer* renderer, FrameState* frame);
+void render_submit(WebGPURenderer* renderer, RenderFrame* frame);
 void end_frame(WebGPURenderer* renderer);

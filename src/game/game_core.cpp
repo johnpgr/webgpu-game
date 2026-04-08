@@ -3,7 +3,7 @@
 GameState* init_game_state(Arena* arena, Atlas* atlas) {
     GameState* game = push_struct(arena, GameState);
     game->arena = arena;
-    game->frame = create_frame_state(arena, 4096);
+    game->render_frame = create_render_frame(arena, 4096);
     game->atlas = atlas;
     game->time = 0.0;
     game->running = true;
@@ -11,12 +11,12 @@ GameState* init_game_state(Arena* arena, Atlas* atlas) {
 }
 
 void game_update(GameState* game, f64 dt) {
-    frame_state_reset(&game->frame);
+    render_frame_reset(&game->render_frame);
     game->time += dt;
 
-    game->frame.clear_color = vec4(0.08f, 0.08f, 0.12f, 1.0f);
-    game->frame.camera_pos = vec2(0.0f, 0.0f);
-    game->frame.camera_zoom = 1.0f;
+    game->render_frame.clear_color = vec4(0.08f, 0.08f, 0.12f, 1.0f);
+    game->render_frame.world_sprites.camera.position = vec2(0.0f, 0.0f);
+    game->render_frame.world_sprites.camera.zoom = 1.0f;
 
     AtlasSprite* bone_sprite =
         atlas_find(game->atlas, string_lit("Weapons/Bone/Bone"));
@@ -28,8 +28,8 @@ void game_update(GameState* game, f64 dt) {
     if(bone_sprite != nullptr) {
         AtlasFrame* bone_frame = atlas_frame(bone_sprite, 0);
         if(bone_frame != nullptr) {
-            push_sprite(
-                &game->frame,
+            push_world_sprite(
+                &game->render_frame.world_sprites,
                 bone_frame->uv_min,
                 bone_frame->uv_max,
                 vec2(-140.0f, -92.0f),
@@ -38,8 +38,8 @@ void game_update(GameState* game, f64 dt) {
                 vec4(0.55f, 0.65f, 0.95f, 1.0f)
             );
 
-            push_sprite(
-                &game->frame,
+            push_world_sprite(
+                &game->render_frame.world_sprites,
                 bone_frame->uv_min,
                 bone_frame->uv_max,
                 vec2(-48.0f, -44.0f),
@@ -54,8 +54,8 @@ void game_update(GameState* game, f64 dt) {
         u32 frame_index = (u32)(game->time * 8.0) % bonfire_sprite->frame_count;
         AtlasFrame* bonfire_frame = atlas_frame(bonfire_sprite, frame_index);
         if(bonfire_frame != nullptr) {
-            push_sprite(
-                &game->frame,
+            push_world_sprite(
+                &game->render_frame.world_sprites,
                 bonfire_frame->uv_min,
                 bonfire_frame->uv_max,
                 vec2(-12.0f, -16.0f),

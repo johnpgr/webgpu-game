@@ -19,13 +19,90 @@ struct App {
     bool running;
     u32 width;
     u32 height;
+    u64 perf_frequency;
+    u64 last_frame_counter;
+    u64 target_frame_ns;
 };
+
+internal u64 app_get_target_frame_ns(SDL_Window* window) {
+#if OS_EMSCRIPTEN
+    (void)window;
+    return 0;
+#else
+    SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+    if(display == 0) {
+        return SDL_NS_PER_SECOND / 60ULL;
+    }
+
+    SDL_DisplayMode const* mode = SDL_GetCurrentDisplayMode(display);
+    if(mode == nullptr) {
+        return SDL_NS_PER_SECOND / 60ULL;
+    }
+
+    f64 refresh_hz = 0.0;
+    if(mode->refresh_rate_numerator > 0 && mode->refresh_rate_denominator > 0) {
+        refresh_hz = (f64)mode->refresh_rate_numerator /
+                     (f64)mode->refresh_rate_denominator;
+    } else if(mode->refresh_rate > 0.0f) {
+        refresh_hz = (f64)mode->refresh_rate;
+    }
+
+    if(refresh_hz <= 1.0) {
+        refresh_hz = 60.0;
+    }
+
+    return (u64)((f64)SDL_NS_PER_SECOND / refresh_hz);
+#endif
+}
+
+internal f64 app_begin_frame(App* app, u64* frame_start_counter) {
+    ASSERT(app != nullptr, "App must not be null!");
+    ASSERT(
+        frame_start_counter != nullptr,
+        "Frame start output must not be null!"
+    );
+
+    *frame_start_counter = SDL_GetPerformanceCounter();
+    if(app->last_frame_counter == 0) {
+        app->last_frame_counter = *frame_start_counter;
+        return 1.0 / 60.0;
+    }
+
+    u64 elapsed = *frame_start_counter - app->last_frame_counter;
+    app->last_frame_counter = *frame_start_counter;
+
+    f64 dt = (f64)elapsed / (f64)app->perf_frequency;
+    return clamp(dt, 1.0 / 1000.0, 0.1);
+}
+
+internal void app_end_frame(App* app, u64 frame_start_counter) {
+#if OS_EMSCRIPTEN
+    (void)app;
+    (void)frame_start_counter;
+#else
+    if(app->target_frame_ns == 0) {
+        return;
+    }
+
+    u64 frame_end_counter = SDL_GetPerformanceCounter();
+    u64 elapsed_counter = frame_end_counter - frame_start_counter;
+    u64 elapsed_ns =
+        (elapsed_counter * SDL_NS_PER_SECOND) / app->perf_frequency;
+
+    if(elapsed_ns < app->target_frame_ns) {
+        SDL_DelayPrecise(app->target_frame_ns - elapsed_ns);
+    }
+#endif
+}
 
 internal void app_tick(void* arg) {
     App* app = (App*)arg;
     if(!app || !app->running) {
         return;
     }
+
+    u64 frame_start_counter = 0;
+    f64 dt = app_begin_frame(app, &frame_start_counter);
 
     // Poll events
     SDL_Event event;
@@ -43,18 +120,31 @@ internal void app_tick(void* arg) {
                 }
                 break;
             }
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+                u32 nw = (u32)event.window.data1;
+                u32 nh = (u32)event.window.data2;
+                if(nw > 0 && nh > 0) {
+                    app->width = nw;
+                    app->height = nh;
+                }
+                break;
+            }
+            case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+                app->target_frame_ns = app_get_target_frame_ns(app->window);
+                break;
         }
     }
 
     // Update game
-    f64 dt = 1.0 / 60.0; // Fixed timestep for now
     game_update(app->game, dt);
 
     // Render
     if(begin_frame(&app->renderer, app->width, app->height)) {
-        render_submit(&app->renderer, &app->game->frame);
+        render_submit(&app->renderer, &app->game->render_frame);
         end_frame(&app->renderer);
     }
+
+    app_end_frame(app, frame_start_counter);
 
 #if OS_EMSCRIPTEN
     if(!app->running) {
@@ -89,6 +179,7 @@ int main(int argc, char** argv) {
     app.running = true;
     app.width = 960;
     app.height = 540;
+    app.perf_frequency = SDL_GetPerformanceFrequency();
 
     // Create window
     u64 window_flags = 0;
@@ -109,10 +200,7 @@ int main(int argc, char** argv) {
     }
 
 #if !OS_EMSCRIPTEN
-    int pw, ph;
-    SDL_GetWindowSizeInPixels(app.window, &pw, &ph);
-    app.width = (u32)pw;
-    app.height = (u32)ph;
+    app.target_frame_ns = app_get_target_frame_ns(app.window);
 #endif
 
     Atlas* atlas = push_struct(arena, Atlas);

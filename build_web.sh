@@ -48,9 +48,10 @@ else
 fi
 
 # Output HTML with embedded assets
-shell_file="${EMSDK:-$emsdk_dir}/upstream/emscripten/html/shell_minimal.html"
+shell_file="$root_dir/web_shell.html"
 link="--shell-file $shell_file"
 link="$link --preload-file $root_dir/assets@/assets"
+link="$link --use-preload-plugins"
 link="$link -sEXPORTED_FUNCTIONS=['_main','_malloc','_free']"
 link="$link -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
 

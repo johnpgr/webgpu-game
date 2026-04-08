@@ -6,7 +6,7 @@
 
 struct GameState {
     Arena* arena;
-    FrameState frame;
+    RenderFrame render_frame;
     Atlas* atlas;
     f64 time;
     bool running;

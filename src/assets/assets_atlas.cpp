@@ -391,12 +391,75 @@ internal void sort_sprites_by_name(Atlas* atlas) {
     }
 }
 
+AtlasImage atlas_load_image(Arena* arena, char const* png_path) {
+    ASSERT(arena != nullptr, "Arena must not be null!");
+    ASSERT(png_path != nullptr, "PNG path must not be null!");
+
+    AtlasImage image = {};
+
+#if OS_EMSCRIPTEN
+    int em_width = 0;
+    int em_height = 0;
+    char* image_data =
+        emscripten_get_preloaded_image_data(png_path, &em_width, &em_height);
+    if(image_data == nullptr) {
+        LOG_ERROR("Failed to get preloaded atlas image '%s'", png_path);
+        return image;
+    }
+
+    image.width = (u32)em_width;
+    image.height = (u32)em_height;
+    u64 pixel_count = (u64)image.width * (u64)image.height * 4ULL;
+    image.pixels = push_array_no_zero(arena, u8, pixel_count);
+    memcpy(image.pixels, image_data, (usize)pixel_count);
+    free(image_data);
+#else
+    SDL_Surface* loaded_surface = IMG_Load(png_path);
+    if(loaded_surface == nullptr) {
+        LOG_ERROR(
+            "Failed to load atlas image '%s': %s",
+            png_path,
+            SDL_GetError()
+        );
+        return image;
+    }
+
+    SDL_Surface* rgba_surface =
+        SDL_ConvertSurface(loaded_surface, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(loaded_surface);
+    if(rgba_surface == nullptr) {
+        LOG_ERROR(
+            "Failed to convert atlas image '%s' to RGBA32: %s",
+            png_path,
+            SDL_GetError()
+        );
+        return image;
+    }
+
+    image.width = (u32)rgba_surface->w;
+    image.height = (u32)rgba_surface->h;
+    u64 pixel_count = (u64)image.width * (u64)image.height * 4ULL;
+    image.pixels = push_array_no_zero(arena, u8, pixel_count);
+    for(u32 y = 0; y < image.height; ++y) {
+        u8* src_row =
+            (u8*)rgba_surface->pixels + (u64)y * (u64)rgba_surface->pitch;
+        u8* dst_row = image.pixels + (u64)y * (u64)image.width * 4ULL;
+        memcpy(dst_row, src_row, (usize)image.width * 4U);
+    }
+
+    SDL_DestroySurface(rgba_surface);
+#endif
+
+    return image;
+}
+
 Atlas atlas_load(Arena* arena, char const* json_path, char const* png_path) {
     ASSERT(arena != nullptr, "Arena must not be null!");
     ASSERT(json_path != nullptr, "JSON path must not be null!");
     ASSERT(png_path != nullptr, "PNG path must not be null!");
 
     Atlas atlas = {};
+    atlas.image_path = png_path;
 
     FileData json_file = os_read_file(arena, json_path);
     if(json_file.data == nullptr || json_file.size == 0) {
@@ -447,75 +510,6 @@ Atlas atlas_load(Arena* arena, char const* json_path, char const* png_path) {
     }
 
     sort_sprites_by_name(&atlas);
-
-    u32 image_width = 0;
-    u32 image_height = 0;
-
-#if OS_EMSCRIPTEN
-    int em_width = 0;
-    int em_height = 0;
-    char* image_data =
-        emscripten_get_preloaded_image_data(png_path, &em_width, &em_height);
-    if(image_data == nullptr) {
-        LOG_ERROR("Failed to get preloaded atlas image '%s'", png_path);
-        return atlas;
-    }
-
-    image_width = (u32)em_width;
-    image_height = (u32)em_height;
-    u64 pixel_count = (u64)image_width * (u64)image_height * 4ULL;
-    atlas.pixel_data = push_array_no_zero(arena, u8, pixel_count);
-    memcpy(atlas.pixel_data, image_data, (usize)pixel_count);
-    free(image_data);
-#else
-    SDL_Surface* loaded_surface = IMG_Load(png_path);
-    if(loaded_surface == nullptr) {
-        LOG_ERROR(
-            "Failed to load atlas image '%s': %s",
-            png_path,
-            SDL_GetError()
-        );
-        return atlas;
-    }
-
-    SDL_Surface* rgba_surface =
-        SDL_ConvertSurface(loaded_surface, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(loaded_surface);
-    if(rgba_surface == nullptr) {
-        LOG_ERROR(
-            "Failed to convert atlas image '%s' to RGBA32: %s",
-            png_path,
-            SDL_GetError()
-        );
-        return atlas;
-    }
-
-    image_width = (u32)rgba_surface->w;
-    image_height = (u32)rgba_surface->h;
-    u64 pixel_count = (u64)image_width * (u64)image_height * 4ULL;
-    atlas.pixel_data = push_array_no_zero(arena, u8, pixel_count);
-    for(u32 y = 0; y < image_height; ++y) {
-        u8* src_row =
-            (u8*)rgba_surface->pixels + (u64)y * (u64)rgba_surface->pitch;
-        u8* dst_row = atlas.pixel_data + (u64)y * (u64)image_width * 4ULL;
-        memcpy(dst_row, src_row, (usize)image_width * 4U);
-    }
-    SDL_DestroySurface(rgba_surface);
-#endif
-
-    if(atlas.atlas_width != image_width || atlas.atlas_height != image_height) {
-        LOG_WARN(
-            "Atlas JSON size %ux%u does not match image size %ux%u; using "
-            "image size",
-            atlas.atlas_width,
-            atlas.atlas_height,
-            image_width,
-            image_height
-        );
-    }
-
-    atlas.atlas_width = image_width;
-    atlas.atlas_height = image_height;
     LOG_INFO("Atlas loaded: %u sprites", atlas.sprite_count);
     return atlas;
 }
