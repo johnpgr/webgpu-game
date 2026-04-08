@@ -33,10 +33,15 @@ internal void app_tick(void* arg) {
             case SDL_EVENT_QUIT:
                 app->running = false;
                 break;
-            case SDL_EVENT_WINDOW_RESIZED:
-                app->width = (u32)event.window.data1;
-                app->height = (u32)event.window.data2;
+            case SDL_EVENT_WINDOW_RESIZED: {
+                u32 nw = (u32)event.window.data1;
+                u32 nh = (u32)event.window.data2;
+                if(nw > 0 && nh > 0) {
+                    app->width = nw;
+                    app->height = nh;
+                }
                 break;
+            }
         }
     }
 
@@ -85,17 +90,29 @@ int main(int argc, char** argv) {
     app.height = 540;
 
     // Create window
+    Uint64 window_flags = SDL_WINDOW_RESIZABLE;
+#if !OS_EMSCRIPTEN
+    window_flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
+
     app.window = SDL_CreateWindow(
         "WebGPU Game",
         (int)app.width,
         (int)app.height,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
+        window_flags
     );
 
     if(!app.window) {
         LOG_FATAL("Failed to create window: %s", SDL_GetError());
         return 1;
     }
+
+#if !OS_EMSCRIPTEN
+    int pw, ph;
+    SDL_GetWindowSizeInPixels(app.window, &pw, &ph);
+    app.width = (u32)pw;
+    app.height = (u32)ph;
+#endif
 
     // Initialize WebGPU
     app.renderer = init_webgpu(app.window);

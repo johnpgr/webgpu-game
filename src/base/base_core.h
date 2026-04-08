@@ -148,6 +148,8 @@ inline f64 get_ticks_f64(void) {
 #endif
 }
 
+#include "base/base_log.h"
+
 #ifndef NDEBUG
 #if COMPILER_MSVC
 #define ASSERT(expr, msg)                                                      \

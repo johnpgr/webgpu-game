@@ -59,7 +59,7 @@ mkdir -p "$web_dir"
 
 # --- Build Targets -----------------------------------------------------------
 didbuild=""
-if [ -z "${game:-}" ]; then game=1; fi
+if [ -z "${game:-}" ] && [ -z "${run:-}" ]; then game=1; fi
 
 if [ "${game:-}" = "1" ]; then
     didbuild=1
@@ -67,8 +67,18 @@ if [ "${game:-}" = "1" ]; then
     echo "built $web_dir/game.html"
 fi
 
+# --- Run ----------------------------------------------------------------------
+if [ "${run:-}" = "1" ]; then
+    if [ ! -f "$web_dir/game.html" ]; then
+        echo "game.html not found. Build first with: ./build_web.sh" >&2
+        exit 1
+    fi
+    echo "serving at http://localhost:6931/game.html"
+    emrun "$web_dir/game.html"
+fi
+
 # --- Warn On No Builds -------------------------------------------------------
-if [ -z "$didbuild" ]; then
-    echo "[WARNING] no valid build target. usage: ./build_web.sh [game] [debug|release]" >&2
+if [ -z "$didbuild" ] && [ -z "${run:-}" ]; then
+    echo "[WARNING] no valid build target. usage: ./build_web.sh [game] [debug|release] [run]" >&2
     exit 1
 fi

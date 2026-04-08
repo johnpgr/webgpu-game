@@ -40,37 +40,24 @@ static WGPUInstance get_instance(void) {
     return wgpuCreateInstance(&desc);
 }
 
-#if OS_EMSCRIPTEN
+// TODO: When WGPULoggingCallbackInfo/wgpuDeviceSetLoggingCallback become available
+// in webgpu.h, migrate to per-device logging callback for finer-grained control.
+// Currently only wgpu-native's global wgpuSetLogCallback is available.
+// emdawnwebgpu (Emscripten) has no logging callback API at all.
+#if !OS_EMSCRIPTEN
 static void wgpu_log_callback(
-    WGPULoggingType type,
-    const char* message,
-    void* userdata
-) {
-    (void)userdata;
-    const char* level_str = "UNKNOWN";
-    switch(type) {
-        case WGPULoggingType_Error:   level_str = "ERROR"; break;
-        case WGPULoggingType_Warning: level_str = "WARN"; break;
-        case WGPULoggingType_Info:    level_str = "INFO"; break;
-        case WGPULoggingType_Verbose: level_str = "VERBOSE"; break;
-        default: break;
-    }
-    LOG_INFO("[WebGPU %s] %s", level_str, message);
-}
-#else
-static void wgpu_log_callback(
-    WGPULoggingLevel level,
+    WGPULogLevel level,
     WGPUStringView message,
     void* userdata
 ) {
     (void)userdata;
     const char* level_str = "UNKNOWN";
     switch(level) {
-        case WGPULoggingLevel_Error:  level_str = "ERROR"; break;
-        case WGPULoggingLevel_Warn:   level_str = "WARN"; break;
-        case WGPULoggingLevel_Info:   level_str = "INFO"; break;
-        case WGPULoggingLevel_Debug:  level_str = "DEBUG"; break;
-        case WGPULoggingLevel_Trace:  level_str = "TRACE"; break;
+        case WGPULogLevel_Error:  level_str = "ERROR"; break;
+        case WGPULogLevel_Warn:  level_str = "WARN"; break;
+        case WGPULogLevel_Info:  level_str = "INFO"; break;
+        case WGPULogLevel_Debug: level_str = "DEBUG"; break;
+        case WGPULogLevel_Trace: level_str = "TRACE"; break;
         default: break;
     }
     LOG_INFO("[WebGPU %s] %.*s", level_str, (int)message.length, message.data);
@@ -192,13 +179,16 @@ static WGPUSurface create_surface(WGPUInstance instance, SDL_Window* window) {
         return wgpuInstanceCreateSurface(instance, &desc);
     }
 #elif OS_EMSCRIPTEN
-    WGPUEmscriptenSurfaceSourceCanvasHTMLSelector from_canvas = {};
-    from_canvas.chain.sType = WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector;
+    WGPUEmscriptenSurfaceSourceCanvasHTMLSelector from_canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
     from_canvas.selector = { "#canvas", WGPU_STRLEN };
 
-    WGPUSurfaceDescriptor desc = {};
+    WGPUSurfaceDescriptor desc = WGPU_SURFACE_DESCRIPTOR_INIT;
     desc.nextInChain = &from_canvas.chain;
-    return wgpuInstanceCreateSurface(instance, &desc);
+    WGPUSurface surface = wgpuInstanceCreateSurface(instance, &desc);
+    if(!surface) {
+        LOG_ERROR("Failed to create Emscripten surface for canvas '#canvas'");
+    }
+    return surface;
 #endif
 
     LOG_FATAL("Failed to create WebGPU surface: unsupported platform");
@@ -253,11 +243,10 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
         return result;
     }
 
-#if OS_EMSCRIPTEN
-    wgpuInstanceSetLoggingCallback(state->instance, wgpu_log_callback, nullptr);
-#else
+#if !OS_EMSCRIPTEN
+    // Global log callback (not per-device — wgpuDeviceSetLoggingCallback not yet available)
     wgpuSetLogCallback(wgpu_log_callback, nullptr);
-    wgpuSetLogLevel(WGPULoggingLevel_Warn);
+    wgpuSetLogLevel(WGPULogLevel_Warn);
 #endif
 
     state->surface = create_surface(state->instance, window);
@@ -267,11 +256,18 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
     }
 
     WGPURequestAdapterOptions adapter_opts = {};
+#if !OS_EMSCRIPTEN
     adapter_opts.compatibleSurface = state->surface;
+#endif
     adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
 
+    LOG_INFO("Requesting WebGPU adapter...");
     WGPURequestAdapterCallbackInfo adapter_cb = {};
+#if OS_EMSCRIPTEN
+    adapter_cb.mode = WGPUCallbackMode_AllowSpontaneous;
+#else
     adapter_cb.mode = WGPUCallbackMode_AllowProcessEvents;
+#endif
     adapter_cb.callback = wgpu_request_adapter_callback;
     adapter_cb.userdata1 = &state->adapter;
     adapter_cb.userdata2 = nullptr;
@@ -282,7 +278,13 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
         adapter_cb
     );
 
+#if OS_EMSCRIPTEN
+    while(!state->adapter) {
+        emscripten_sleep(0);
+    }
+#else
     wgpuInstanceProcessEvents(state->instance);
+#endif
 
     if(!state->adapter) {
         LOG_FATAL("Failed to get WebGPU adapter");
@@ -290,6 +292,7 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
     }
 
     WGPUDeviceDescriptor device_desc = {};
+    device_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
     device_desc.deviceLostCallbackInfo.callback = wgpu_device_lost_callback;
     device_desc.deviceLostCallbackInfo.userdata1 = nullptr;
     device_desc.deviceLostCallbackInfo.userdata2 = nullptr;
@@ -298,7 +301,11 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
     device_desc.uncapturedErrorCallbackInfo.userdata2 = nullptr;
 
     WGPURequestDeviceCallbackInfo device_cb = {};
+#if OS_EMSCRIPTEN
+    device_cb.mode = WGPUCallbackMode_AllowSpontaneous;
+#else
     device_cb.mode = WGPUCallbackMode_AllowProcessEvents;
+#endif
     device_cb.callback = wgpu_request_device_callback;
     device_cb.userdata1 = &state->device;
     device_cb.userdata2 = nullptr;
@@ -309,7 +316,13 @@ WebGPURenderer init_webgpu(SDL_Window* window) {
         device_cb
     );
 
+#if OS_EMSCRIPTEN
+    while(!state->device) {
+        emscripten_sleep(0);
+    }
+#else
     wgpuInstanceProcessEvents(state->instance);
+#endif
 
     if(!state->device) {
         LOG_FATAL("Failed to get WebGPU device");
@@ -370,10 +383,17 @@ static void configure_surface(WebGPUState* state) {
     if(!state->surface || !state->device) {
         return;
     }
+#if OS_EMSCRIPTEN
+    wgpuSurfaceUnconfigure(state->surface); // Must unconfigure before reconfiguring with new size
+#endif
 
     WGPUSurfaceConfiguration config = {};
     config.device = state->device;
+#if OS_EMSCRIPTEN
+    config.format = WGPUTextureFormat_RGBA8Unorm;
+#else
     config.format = WGPUTextureFormat_BGRA8Unorm;
+#endif
     config.usage = WGPUTextureUsage_RenderAttachment;
     config.width = state->surface_width;
     config.height = state->surface_height;
@@ -412,7 +432,11 @@ bool begin_frame(WebGPURenderer* renderer, u32 width, u32 height) {
     state->current_texture = state->surface_texture.texture;
 
     WGPUTextureViewDescriptor view_desc = {};
+#if OS_EMSCRIPTEN
+    view_desc.format = WGPUTextureFormat_RGBA8Unorm;
+#else
     view_desc.format = WGPUTextureFormat_BGRA8Unorm;
+#endif
     view_desc.dimension = WGPUTextureViewDimension_2D;
     view_desc.baseMipLevel = 0;
     view_desc.mipLevelCount = 1;
@@ -507,7 +531,9 @@ void end_frame(WebGPURenderer* renderer) {
     }
 
     if(state->current_texture) {
+#if !OS_EMSCRIPTEN
         wgpuSurfacePresent(state->surface);
+#endif
         wgpuTextureRelease(state->current_texture);
         state->current_texture = nullptr;
     }
