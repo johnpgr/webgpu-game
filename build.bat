@@ -25,169 +25,9 @@ set vendor_platform_dir=%vendor_dir%\%host_platform%-%host_arch%
 set vendor_emsdk_dir=%vendor_platform_dir%\emsdk
 
 if "%vendor%"=="1" (
-    echo === Downloading vendor dependencies ===
-
-    :: Detect architecture
-    if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
-        set dl_arch=x64
-    ) else if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
-        set dl_arch=arm64
-    ) else (
-        set dl_arch=x86
-    )
-
-    :: --- SDL3 ---
-    set SDL3_VERSION=3.4.4
-    set SDL3_BASE=https://github.com/libsdl-org/SDL/releases/download/release-!SDL3_VERSION!
-
-    echo [SDL3] Downloading SDL !SDL3_VERSION! for Windows...
-    if not exist "%vendor_dir%\sdl3_tmp" mkdir "%vendor_dir%\sdl3_tmp"
-
-    powershell -Command "Invoke-WebRequest -Uri '!SDL3_BASE!/SDL3-devel-!SDL3_VERSION!-VC.zip' -OutFile '%vendor_dir%\sdl3_tmp\sdl3.zip'" || (
-        echo [SDL3] Download failed!
-        exit /b 1
-    )
-
-    echo [SDL3] Extracting...
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\sdl3_tmp\sdl3.zip', '%vendor_dir%\sdl3_tmp')"
-
-    :: Find extracted directory
-    for /d %%d in ("%vendor_dir%\sdl3_tmp\SDL3-*") do set sdl3_extracted=%%d
-
-    if not exist "%vendor_dir%\SDL3" mkdir "%vendor_dir%\SDL3"
-    if exist "!sdl3_extracted!\SDL3-!SDL3_VERSION!\include" (
-        xcopy /s /y /q "!sdl3_extracted!\SDL3-!SDL3_VERSION!\include" "%vendor_dir%\SDL3\include\" >nul
-        xcopy /s /y /q "!sdl3_extracted!\SDL3-!SDL3_VERSION!\lib" "%vendor_dir%\SDL3\lib\" >nul
-    ) else if exist "!sdl3_extracted!\include" (
-        xcopy /s /y /q "!sdl3_extracted!\include" "%vendor_dir%\SDL3\include\" >nul
-        xcopy /s /y /q "!sdl3_extracted!\lib" "%vendor_dir%\SDL3\lib\" >nul
-    )
-
-    rmdir /s /q "%vendor_dir%\sdl3_tmp"
-    echo [SDL3] Done.
-
-    :: --- SDL3_image ---
-    set SDL3_IMAGE_VERSION=3.4.2
-    set SDL3_IMAGE_BASE=https://github.com/libsdl-org/SDL_image/releases/download/release-!SDL3_IMAGE_VERSION!
-
-    echo [SDL3_image] Downloading SDL_image !SDL3_IMAGE_VERSION! for Windows...
-    if not exist "%vendor_dir%\sdl3_image_tmp" mkdir "%vendor_dir%\sdl3_image_tmp"
-
-    powershell -Command "Invoke-WebRequest -Uri '!SDL3_IMAGE_BASE!/SDL3_image-devel-!SDL3_IMAGE_VERSION!-VC.zip' -OutFile '%vendor_dir%\sdl3_image_tmp\sdl3_image.zip'" || (
-        echo [SDL3_image] Download failed!
-        exit /b 1
-    )
-
-    echo [SDL3_image] Extracting...
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\sdl3_image_tmp\sdl3_image.zip', '%vendor_dir%\sdl3_image_tmp')"
-
-    :: Find extracted directory
-    for /d %%d in ("%vendor_dir%\sdl3_image_tmp\SDL3_image-*") do set sdl3_image_extracted=%%d
-
-    if not exist "%vendor_dir%\SDL3_image" mkdir "%vendor_dir%\SDL3_image"
-    if exist "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\include" (
-        xcopy /s /y /q "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\include" "%vendor_dir%\SDL3_image\include\" >nul
-        xcopy /s /y /q "!sdl3_image_extracted!\SDL3_image-!SDL3_IMAGE_VERSION!\lib" "%vendor_dir%\SDL3_image\lib\" >nul
-    ) else if exist "!sdl3_image_extracted!\include" (
-        xcopy /s /y /q "!sdl3_image_extracted!\include" "%vendor_dir%\SDL3_image\include\" >nul
-        xcopy /s /y /q "!sdl3_image_extracted!\lib" "%vendor_dir%\SDL3_image\lib\" >nul
-    )
-
-    rmdir /s /q "%vendor_dir%\sdl3_image_tmp"
-    echo [SDL3_image] Done.
-
-    :: --- wgpu-native (WebGPU C API) ---
-    set WGPU_VERSION=27.0.4.0
-    set WGPU_BASE=https://github.com/gfx-rs/wgpu-native/releases/download/v!WGPU_VERSION!
-
-    if "!dl_arch!"=="x64" (
-        set wgpu_artifact=wgpu-windows-x86_64-msvc-release.zip
-    ) else if "!dl_arch!"=="arm64" (
-        set wgpu_artifact=wgpu-windows-aarch64-msvc-release.zip
-    ) else (
-        set wgpu_artifact=wgpu-windows-i686-msvc-release.zip
-    )
-
-    echo [wgpu-native] Downloading wgpu-native v!WGPU_VERSION!...
-    if not exist "%vendor_dir%\wgpu_tmp" mkdir "%vendor_dir%\wgpu_tmp"
-
-    powershell -Command "Invoke-WebRequest -Uri '!WGPU_BASE!/!wgpu_artifact!' -OutFile '%vendor_dir%\wgpu_tmp\wgpu.zip'" || (
-        echo [wgpu-native] Download failed!
-        exit /b 1
-    )
-
-    echo [wgpu-native] Extracting...
-    if not exist "%vendor_dir%\wgpu_tmp\extracted" mkdir "%vendor_dir%\wgpu_tmp\extracted"
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%vendor_dir%\wgpu_tmp\wgpu.zip', '%vendor_dir%\wgpu_tmp\extracted')"
-
-    :: Find extracted directory - wgpu extracts directly without a wrapper dir
-    set wgpu_inner=%vendor_dir%\wgpu_tmp\extracted
-    if not exist "!wgpu_inner!\include\webgpu\webgpu.h" (
-        for /d %%d in ("!wgpu_inner!\*") do (
-            if exist "%%d\include\webgpu\webgpu.h" set wgpu_inner=%%d
-        )
-    )
-
-    if not exist "%vendor_dir%\webgpu\include\webgpu" mkdir "%vendor_dir%\webgpu\include\webgpu"
-    if not exist "%vendor_dir%\webgpu\lib" mkdir "%vendor_dir%\webgpu\lib"
-
-    :: Copy headers
-    if exist "!wgpu_inner!\include\webgpu" (
-        xcopy /y "!wgpu_inner!\include\webgpu\*" "%vendor_dir%\webgpu\include\webgpu\" >nul
-    ) else if exist "!wgpu_inner!\webgpu.h" (
-        copy /y "!wgpu_inner!\webgpu.h" "%vendor_dir%\webgpu\include\webgpu\" >nul
-    )
-
-    :: Copy libraries
-    if exist "!wgpu_inner!\lib" (
-        copy /y "!wgpu_inner!\lib\*" "%vendor_dir%\webgpu\lib\" >nul 2>&1
-    )
-    for %%e in (lib dll pdb) do (
-        if exist "!wgpu_inner!\*.%%e" copy /y "!wgpu_inner!\*.%%e" "%vendor_dir%\webgpu\lib\" >nul 2>&1
-    )
-
-    rmdir /s /q "%vendor_dir%\wgpu_tmp"
-    echo [wgpu-native] Done.
-
-    :: --- Emscripten SDK ---
-    set emsdk_dir=%vendor_dir%\emsdk
-    if exist "!emsdk_dir!\upstream\emscripten\emcc.bat" (
-        echo [emscripten] Already installed, skipping...
-    ) else (
-        echo [emscripten] Installing Emscripten SDK...
-        if not exist "!emsdk_dir!" (
-            git clone https://github.com/emscripten-core/emsdk.git "!emsdk_dir!" || (
-                echo [emscripten] Clone failed!
-                exit /b 1
-            )
-        ) else (
-            pushd "!emsdk_dir!"
-            git pull || (
-                popd
-                echo [emscripten] Update failed!
-                exit /b 1
-            )
-            popd
-        )
-
-        pushd "!emsdk_dir!"
-        call emsdk.bat install latest || (
-            popd
-            echo [emscripten] Install failed!
-            exit /b 1
-        )
-        call emsdk.bat activate latest || (
-            popd
-            echo [emscripten] Activate failed!
-            exit /b 1
-        )
-        popd
-        echo [emscripten] Done.
-    )
-
-    echo === Vendor dependencies installed to %vendor_dir% ===
-    dir /s /b "%vendor_dir%" | find /c /v "" & echo files
-    exit /b 0
+    echo vendor downloads have been removed.
+    echo Place vendored dependencies under %vendor_dir%\^<platform^>-^<arch^>\, for example %vendor_dir%\win32-x64\SDL3\.
+    exit /b 1
 )
 
 :: --- Paths -------------------------------------------------------------------
@@ -217,19 +57,19 @@ if "!build_native!"=="1" (
 
     if not exist "!webgpu_dir!\include\webgpu\webgpu.h" (
         echo WebGPU headers not found at !webgpu_dir!\include\webgpu\webgpu.h
-        echo Run: `build vendor` to download dependencies
+        echo Place vendored dependencies under !vendor_platform_dir!\
         exit /b 1
     )
 
     if not exist "!sdl3_dir!\include\SDL3\SDL.h" (
         echo SDL3 not found at !sdl3_dir!\include\SDL3\SDL.h
-        echo Run: `build vendor` to download dependencies
+        echo Place vendored dependencies under !vendor_platform_dir!\
         exit /b 1
     )
 
     if not exist "!sdl3_image_dir!\include\SDL3_image\SDL_image.h" (
         echo SDL3_image not found at !sdl3_image_dir!\include\SDL3_image\SDL_image.h
-        echo Run: `build vendor` to download dependencies
+        echo Place vendored dependencies under !vendor_platform_dir!\
         exit /b 1
     )
 
@@ -277,7 +117,7 @@ if "!build_native!"=="1" (
 if "%web%"=="1" (
     echo [web]
 
-    set emsdk_dir=%vendor_dir%\emsdk
+    set emsdk_dir=%vendor_emsdk_dir%
     set emsdk_env=!emsdk_dir!\emsdk_env.bat
     if exist "!emsdk_env!" call "!emsdk_env!" >nul
 
