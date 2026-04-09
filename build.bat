@@ -88,6 +88,10 @@ if "!build_native!"=="1" (
         exit /b 1
     )
 
+    call :ensure_not_lfs_pointer "!vendor_lib_dir!\wgpu_native.lib" || exit /b 1
+    call :ensure_not_lfs_pointer "!vendor_lib_dir!\SDL3.lib" || exit /b 1
+    call :ensure_not_lfs_pointer "!vendor_lib_dir!\SDL3_image.lib" || exit /b 1
+
     echo [win32 !host_arch!]
     set common=/std:c++20 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4204 /wd4996 /I"!src_dir!" /I"!vendor_inc_dir!" /DSDL_PLATFORM_WIN32
     set clang_common=/clang:-Wno-c99-designator /clang:-fuse-ld=lld
@@ -176,3 +180,20 @@ if "%didbuild%"=="" if not "%run%"=="1" (
 )
 
 echo Build complete.
+goto :eof
+
+:ensure_not_lfs_pointer
+set "check_path=%~1"
+set "check_first_line="
+for /f "usebackq delims=" %%i in ("%~1") do (
+    set "check_first_line=%%i"
+    goto :ensure_not_lfs_pointer_done
+)
+
+:ensure_not_lfs_pointer_done
+if "!check_first_line!"=="version https://git-lfs.github.com/spec/v1" (
+    echo Git LFS object missing for %~nx1
+    echo Run: git lfs pull
+    exit /b 1
+)
+exit /b 0
