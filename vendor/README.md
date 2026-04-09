@@ -13,10 +13,11 @@ vendor/
     SDL3_image/
     webgpu/
     emsdk/
-  win32-x64/
+  win32/
     SDL3/
     SDL3_image/
     webgpu/
+  win32-x64/
     emsdk/
   macos-arm64/
     SDL3/
@@ -33,9 +34,11 @@ Keep each package as a self-contained install/unpack output.
 - `SDL3_image/include/SDL3_image/SDL_image.h`
 - `webgpu/include/webgpu/webgpu.h`
 - `webgpu/lib/` with the platform-specific binaries
+- `webgpu/lib/<arch>/` on Windows, for example `webgpu/lib/arm64/`
 - `emsdk/` as the host-side Emscripten SDK for that platform
 
 ## Notes
 
-- The build scripts now look for dependencies in `vendor/<platform>-<arch>/...`.
-- Web builds look for emsdk in `vendor/<platform>-<arch>/emsdk/`.
+- Native builds look for Linux and macOS dependencies in `vendor/<platform>-<arch>/...`.
+- Native Windows builds look for shared dependencies in `vendor/win32/...` and choose the matching `lib/<arch>/` directory.
+- Web builds on Windows still look for emsdk in `vendor/win32-x64/emsdk/`.

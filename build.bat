@@ -20,13 +20,13 @@ if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
 )
 
 set host_platform=win32
-set vendor_platform_dir=%vendor_dir%\%host_platform%-%host_arch%
-
-set vendor_emsdk_dir=%vendor_platform_dir%\emsdk
+set vendor_native_dir=%vendor_dir%\%host_platform%
+set vendor_emsdk_dir=%vendor_dir%\%host_platform%-x64\emsdk
 
 if "%vendor%"=="1" (
     echo vendor downloads have been removed.
-    echo Place vendored dependencies under %vendor_dir%\^<platform^>-^<arch^>\, for example %vendor_dir%\win32-x64\SDL3\.
+    echo Place native Windows dependencies under %vendor_native_dir%\, for example %vendor_native_dir%\SDL3\.
+    echo Keep the Emscripten SDK under %vendor_dir%\win32-x64\emsdk\.
     exit /b 1
 )
 
@@ -51,45 +51,66 @@ if "%game%"=="1" set build_native=1
 if "%dll%"=="1" set build_native=1
 
 if "!build_native!"=="1" (
-    set webgpu_dir=%vendor_platform_dir%\webgpu
-    set sdl3_dir=%vendor_platform_dir%\SDL3
-    set sdl3_image_dir=%vendor_platform_dir%\SDL3_image
+    set webgpu_dir=%vendor_native_dir%\webgpu
+    set sdl3_dir=%vendor_native_dir%\SDL3
+    set sdl3_image_dir=%vendor_native_dir%\SDL3_image
+    set webgpu_lib_dir=!webgpu_dir!\lib\!host_arch!
+    set sdl3_lib_dir=!sdl3_dir!\lib\!host_arch!
+    set sdl3_image_lib_dir=!sdl3_image_dir!\lib\!host_arch!
 
     if not exist "!webgpu_dir!\include\webgpu\webgpu.h" (
         echo WebGPU headers not found at !webgpu_dir!\include\webgpu\webgpu.h
-        echo Place vendored dependencies under !vendor_platform_dir!\
+        echo Place native Windows dependencies under !vendor_native_dir!\
         exit /b 1
     )
 
     if not exist "!sdl3_dir!\include\SDL3\SDL.h" (
         echo SDL3 not found at !sdl3_dir!\include\SDL3\SDL.h
-        echo Place vendored dependencies under !vendor_platform_dir!\
+        echo Place native Windows dependencies under !vendor_native_dir!\
         exit /b 1
     )
 
     if not exist "!sdl3_image_dir!\include\SDL3_image\SDL_image.h" (
         echo SDL3_image not found at !sdl3_image_dir!\include\SDL3_image\SDL_image.h
-        echo Place vendored dependencies under !vendor_platform_dir!\
+        echo Place native Windows dependencies under !vendor_native_dir!\
         exit /b 1
     )
 
-    echo [win32]
+    if not exist "!webgpu_lib_dir!\wgpu_native.lib" (
+        echo WebGPU !host_arch! libraries not found at !webgpu_lib_dir!\wgpu_native.lib
+        echo Place native Windows dependencies under !vendor_native_dir!\
+        exit /b 1
+    )
+
+    if not exist "!sdl3_lib_dir!\SDL3.lib" (
+        echo SDL3 !host_arch! libraries not found at !sdl3_lib_dir!\SDL3.lib
+        echo Place native Windows dependencies under !vendor_native_dir!\
+        exit /b 1
+    )
+
+    if not exist "!sdl3_image_lib_dir!\SDL3_image.lib" (
+        echo SDL3_image !host_arch! libraries not found at !sdl3_image_lib_dir!\SDL3_image.lib
+        echo Place native Windows dependencies under !vendor_native_dir!\
+        exit /b 1
+    )
+
+    echo [win32 !host_arch!]
     set common=/std:c++20 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4204 /wd4996 /I"!src_dir!" /I"!webgpu_dir!\include" /I"!sdl3_dir!\include" /I"!sdl3_image_dir!\include" /DSDL_PLATFORM_WIN32
     set clang_common=/clang:-Wno-c99-designator /clang:-fuse-ld=lld
     if "%debug%"=="1"   set compile=clang-cl !common! !clang_common! /Od /Z7
     if "%release%"=="1" set compile=clang-cl !common! !clang_common! /O2 /DNDEBUG
 
-    set host_libs=/LIBPATH:"!webgpu_dir!\lib" /LIBPATH:"!sdl3_dir!\lib\x64" /LIBPATH:"!sdl3_image_dir!\lib\x64" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
-    set dll_libs=/LIBPATH:"!sdl3_dir!\lib\x64" /LIBPATH:"!sdl3_image_dir!\lib\x64" SDL3_image.lib SDL3.lib
+    set host_libs=/LIBPATH:"!webgpu_lib_dir!" /LIBPATH:"!sdl3_lib_dir!" /LIBPATH:"!sdl3_image_lib_dir!" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
+    set dll_libs=/LIBPATH:"!sdl3_lib_dir!" /LIBPATH:"!sdl3_image_lib_dir!" SDL3_image.lib SDL3.lib
 
     if "%game%"=="1" (
         if exist "%root_dir%\assets" (
             xcopy /s /y "%root_dir%\assets" "%bin_dir%\assets\" >nul 2>&1
         )
 
-        if exist "!webgpu_dir!\lib\wgpu_native.dll" copy /y "!webgpu_dir!\lib\wgpu_native.dll" "!bin_dir!\" >nul 2>&1
-        if exist "!sdl3_dir!\lib\x64\SDL3.dll" copy /y "!sdl3_dir!\lib\x64\SDL3.dll" "!bin_dir!\" >nul 2>&1
-        if exist "!sdl3_image_dir!\lib\x64\SDL3_image.dll" copy /y "!sdl3_image_dir!\lib\x64\SDL3_image.dll" "!bin_dir!\" >nul 2>&1
+        if exist "!webgpu_lib_dir!\wgpu_native.dll" copy /y "!webgpu_lib_dir!\wgpu_native.dll" "!bin_dir!\" >nul 2>&1
+        if exist "!sdl3_lib_dir!\SDL3.dll" copy /y "!sdl3_lib_dir!\SDL3.dll" "!bin_dir!\" >nul 2>&1
+        if exist "!sdl3_image_lib_dir!\SDL3_image.dll" copy /y "!sdl3_image_lib_dir!\SDL3_image.dll" "!bin_dir!\" >nul 2>&1
     )
 
     pushd "%bin_dir%"
@@ -122,7 +143,7 @@ if "%web%"=="1" (
     if exist "!emsdk_env!" call "!emsdk_env!" >nul
 
     where emcc >nul 2>&1 || (
-        echo emcc not found. Expected emsdk at %vendor_dir%\%host_platform%-%host_arch%\emsdk\ or on PATH.
+        echo emcc not found. Expected emsdk at %vendor_dir%\win32-x64\emsdk\ or on PATH.
         exit /b 1
     )
 
@@ -146,7 +167,7 @@ if "%run%"=="1" (
     )
 
     where emrun >nul 2>&1 || (
-        echo emrun not found. Expected emsdk at %vendor_dir%\%host_platform%-%host_arch%\emsdk\ or on PATH.
+        echo emrun not found. Expected emsdk at %vendor_dir%\win32-x64\emsdk\ or on PATH.
         exit /b 1
     )
 
