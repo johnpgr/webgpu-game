@@ -1,3 +1,4 @@
+#include <math.h>
 #include <string.h>
 
 #include "render/webgpu.h"
@@ -62,6 +63,10 @@ struct WebGPUState {
     u32 instance_buffer_capacity;
     WGPUBuffer background_instance_buffer;
     u32 background_instance_buffer_capacity;
+    SpriteInstance* sprite_upload_data;
+    u32 sprite_upload_capacity;
+    ColorRectInstance* background_upload_data;
+    u32 background_upload_capacity;
 
     WGPUTexture depth_texture;
     WGPUTextureView depth_view;
@@ -393,6 +398,90 @@ static void ensure_background_instance_buffer(WebGPUState* state, u32 required) 
     state->background_instance_buffer_capacity = new_capacity;
 }
 
+static void ensure_sprite_upload_data(WebGPUState* state, u32 required) {
+    if(required <= state->sprite_upload_capacity) {
+        return;
+    }
+
+    u32 new_capacity = next_pow2_u32(required);
+    void* new_data = SDL_realloc(
+        state->sprite_upload_data,
+        (usize)((u64)sizeof(SpriteInstance) * (u64)new_capacity)
+    );
+    ASSERT(new_data != nullptr, "Failed to grow sprite upload staging buffer");
+    state->sprite_upload_data = (SpriteInstance*)new_data;
+    state->sprite_upload_capacity = new_capacity;
+}
+
+static void ensure_background_upload_data(WebGPUState* state, u32 required) {
+    if(required <= state->background_upload_capacity) {
+        return;
+    }
+
+    u32 new_capacity = next_pow2_u32(required);
+    void* new_data = SDL_realloc(
+        state->background_upload_data,
+        (usize)((u64)sizeof(ColorRectInstance) * (u64)new_capacity)
+    );
+    ASSERT(
+        new_data != nullptr,
+        "Failed to grow background upload staging buffer"
+    );
+    state->background_upload_data = (ColorRectInstance*)new_data;
+    state->background_upload_capacity = new_capacity;
+}
+
+static f32 srgb_channel_to_linear(f32 channel) {
+    if(channel <= 0.04045f) {
+        return channel / 12.92f;
+    }
+
+    return powf((channel + 0.055f) / 1.055f, 2.4f);
+}
+
+static vec4 authored_color_to_render_color(vec4 color) {
+    return vec4(
+        srgb_channel_to_linear(color.r),
+        srgb_channel_to_linear(color.g),
+        srgb_channel_to_linear(color.b),
+        color.a
+    );
+}
+
+static bool texture_format_is_srgb(WGPUTextureFormat format) {
+    switch(format) {
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static WGPUTextureFormat pick_surface_format(
+    WGPUTextureFormat const* formats,
+    usize format_count
+) {
+    WGPUTextureFormat preferred_formats[] = {
+        WGPUTextureFormat_BGRA8UnormSrgb,
+        WGPUTextureFormat_RGBA8UnormSrgb,
+        WGPUTextureFormat_BGRA8Unorm,
+        WGPUTextureFormat_RGBA8Unorm,
+    };
+
+    for(usize preferred_index = 0;
+        preferred_index < ARRAY_COUNT(preferred_formats);
+        preferred_index++) {
+        for(usize format_index = 0; format_index < format_count; format_index++) {
+            if(formats[format_index] == preferred_formats[preferred_index]) {
+                return formats[format_index];
+            }
+        }
+    }
+
+    return formats[0];
+}
+
 static void write_world_camera_uniform(
     WebGPUState* state,
     WorldCamera const* camera,
@@ -433,11 +522,17 @@ static void upload_world_sprites(
     }
 
     ensure_instance_buffer(state, sprite_pass->sprite_count);
+    ensure_sprite_upload_data(state, sprite_pass->sprite_count);
+    for(u32 i = 0; i < sprite_pass->sprite_count; i++) {
+        state->sprite_upload_data[i] = sprite_pass->sprites[i];
+        state->sprite_upload_data[i].tint =
+            authored_color_to_render_color(state->sprite_upload_data[i].tint);
+    }
     wgpuQueueWriteBuffer(
         state->queue,
         state->instance_buffer,
         0,
-        sprite_pass->sprites,
+        state->sprite_upload_data,
         (size_t)((u64)sizeof(SpriteInstance) * (u64)sprite_pass->sprite_count)
     );
 }
@@ -451,11 +546,18 @@ static void upload_background_rects(
     }
 
     ensure_background_instance_buffer(state, backgrounds->rect_count);
+    ensure_background_upload_data(state, backgrounds->rect_count);
+    for(u32 i = 0; i < backgrounds->rect_count; i++) {
+        state->background_upload_data[i] = backgrounds->rects[i];
+        state->background_upload_data[i].color = authored_color_to_render_color(
+            state->background_upload_data[i].color
+        );
+    }
     wgpuQueueWriteBuffer(
         state->queue,
         state->background_instance_buffer,
         0,
-        backgrounds->rects,
+        state->background_upload_data,
         (size_t)((u64)sizeof(ColorRectInstance) * (u64)backgrounds->rect_count)
     );
 }
@@ -709,7 +811,11 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     WGPUSurfaceCapabilities surface_caps = {};
     wgpuSurfaceGetCapabilities(state->surface, state->adapter, &surface_caps);
     ASSERT(surface_caps.formatCount > 0, "No surface formats available");
-    state->surface_format = surface_caps.formats[0];
+    state->surface_format =
+        pick_surface_format(surface_caps.formats, surface_caps.formatCount);
+    if(!texture_format_is_srgb(state->surface_format)) {
+        LOG_WARN("Surface does not expose an sRGB swapchain format");
+    }
     wgpuSurfaceCapabilitiesFreeMembers(surface_caps);
 
     FileData sprite_shader_source =
@@ -776,7 +882,7 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
         WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     atlas_desc.dimension = WGPUTextureDimension_2D;
     atlas_desc.size = {atlas->atlas_width, atlas->atlas_height, 1};
-    atlas_desc.format = WGPUTextureFormat_RGBA8Unorm;
+    atlas_desc.format = WGPUTextureFormat_RGBA8UnormSrgb;
     atlas_desc.mipLevelCount = 1;
     atlas_desc.sampleCount = 1;
     state->atlas_texture = wgpuDeviceCreateTexture(state->device, &atlas_desc);
@@ -1098,6 +1204,12 @@ void cleanup_webgpu(WebGPURenderer* renderer) {
     if(state->background_instance_buffer) {
         wgpuBufferRelease(state->background_instance_buffer);
     }
+    if(state->sprite_upload_data) {
+        SDL_free(state->sprite_upload_data);
+    }
+    if(state->background_upload_data) {
+        SDL_free(state->background_upload_data);
+    }
     if(state->vertex_buffer) {
         wgpuBufferRelease(state->vertex_buffer);
     }
@@ -1215,16 +1327,18 @@ void render_submit(WebGPURenderer* renderer, RenderFrame* frame) {
     WGPUCommandEncoder encoder =
         wgpuDeviceCreateCommandEncoder(state->device, &encoder_desc);
 
+    vec4 clear_color = authored_color_to_render_color(frame->clear_color);
+
     WGPURenderPassColorAttachment color_attachment = {};
     color_attachment.view = state->current_view;
     color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
     color_attachment.loadOp = WGPULoadOp_Clear;
     color_attachment.storeOp = WGPUStoreOp_Store;
     color_attachment.clearValue = {
-        frame->clear_color.r,
-        frame->clear_color.g,
-        frame->clear_color.b,
-        frame->clear_color.a,
+        clear_color.r,
+        clear_color.g,
+        clear_color.b,
+        clear_color.a,
     };
 
     WGPURenderPassDepthStencilAttachment depth_attachment = {};
