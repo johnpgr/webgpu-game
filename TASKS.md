@@ -10,15 +10,17 @@ The code is still running as a free-move demo, so this becomes the base for ever
 
 --------------------------
 
-## 2. Add real jump input
-Extend `GameInput` beyond `move_x`/`move_y` so the game can detect `jump_pressed` and `jump_held`.
-Right now the app only feeds movement axes, which blocks proper side-scroller controls.
+<!-- Im not bothering with physics on this game for now -->
+<!-- ## 2. Add real jump input -->
+<!-- Extend `GameInput` beyond `move_x`/`move_y` so the game can detect `jump_pressed` and `jump_held`. -->
+<!-- Right now the app only feeds movement axes, which blocks proper side-scroller controls. -->
 
 --------------------------
 
-## 3. Replace sandbox movement with side-scroller physics
-Swap the current 2D velocity mapping for run speed, gravity, jump impulse, and a grounded state.
-This is the main step that makes the game feel like a platformer instead of a movement test.
+<!-- Im not bothering with physics on this game for now -->
+<!-- ## 3. Replace sandbox movement with side-scroller physics -->
+<!-- Swap the current 2D velocity mapping for run speed, gravity, jump impulse, and a grounded state. -->
+<!-- This is the main step that makes the game feel like a platformer instead of a movement test. -->
 
 --------------------------
 
