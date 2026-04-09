@@ -123,7 +123,7 @@ static void wgpu_log_callback(
 #endif
 
 static void wgpu_error_callback(
-    WGPUDevice const* device,
+    WGPUDevice* device,
     WGPUErrorType type,
     WGPUStringView message,
     void* userdata1,
@@ -133,7 +133,7 @@ static void wgpu_error_callback(
     (void)userdata1;
     (void)userdata2;
 
-    char const* type_str = "UNKNOWN";
+    const char* type_str = "UNKNOWN";
     switch(type) {
         case WGPUErrorType_Validation:
             type_str = "VALIDATION";
@@ -154,7 +154,7 @@ static void wgpu_error_callback(
 }
 
 static void wgpu_device_lost_callback(
-    WGPUDevice const* device,
+    WGPUDevice* device,
     WGPUDeviceLostReason reason,
     WGPUStringView message,
     void* userdata1,
@@ -380,7 +380,10 @@ static void ensure_instance_buffer(WebGPUState* state, u32 required) {
     state->instance_buffer_capacity = new_capacity;
 }
 
-static void ensure_background_instance_buffer(WebGPUState* state, u32 required) {
+static void ensure_background_instance_buffer(
+    WebGPUState* state,
+    u32 required
+) {
     if(required <= state->background_instance_buffer_capacity) {
         return;
     }
@@ -459,7 +462,7 @@ static bool texture_format_is_srgb(WGPUTextureFormat format) {
 }
 
 static WGPUTextureFormat pick_surface_format(
-    WGPUTextureFormat const* formats,
+    WGPUTextureFormat* formats,
     usize format_count
 ) {
     WGPUTextureFormat preferred_formats[] = {
@@ -472,7 +475,8 @@ static WGPUTextureFormat pick_surface_format(
     for(usize preferred_index = 0;
         preferred_index < ARRAY_COUNT(preferred_formats);
         preferred_index++) {
-        for(usize format_index = 0; format_index < format_count; format_index++) {
+        for(usize format_index = 0; format_index < format_count;
+            format_index++) {
             if(formats[format_index] == preferred_formats[preferred_index]) {
                 return formats[format_index];
             }
@@ -484,7 +488,7 @@ static WGPUTextureFormat pick_surface_format(
 
 static void write_world_camera_uniform(
     WebGPUState* state,
-    WorldCamera const* camera,
+    WorldCamera* camera,
     u32 surface_width,
     u32 surface_height
 ) {
@@ -515,7 +519,7 @@ static void write_world_camera_uniform(
 
 static void upload_world_sprites(
     WebGPUState* state,
-    WorldSpritePass const* sprite_pass
+    WorldSpritePass* sprite_pass
 ) {
     if(sprite_pass->sprite_count == 0) {
         return;
@@ -539,7 +543,7 @@ static void upload_world_sprites(
 
 static void upload_background_rects(
     WebGPUState* state,
-    BackgroundPass const* backgrounds
+    BackgroundPass* backgrounds
 ) {
     if(backgrounds->rect_count == 0) {
         return;
@@ -565,7 +569,7 @@ static void upload_background_rects(
 static void render_backgrounds(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
-    BackgroundPass const* backgrounds
+    BackgroundPass* backgrounds
 ) {
     if(backgrounds->rect_count == 0) {
         return;
@@ -602,20 +606,13 @@ static void render_backgrounds(
         0,
         sizeof(u16) * 6
     );
-    wgpuRenderPassEncoderDrawIndexed(
-        pass,
-        6,
-        backgrounds->rect_count,
-        0,
-        0,
-        0
-    );
+    wgpuRenderPassEncoderDrawIndexed(pass, 6, backgrounds->rect_count, 0, 0, 0);
 }
 
 static void render_world_sprites(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
-    WorldSpritePass const* sprite_pass
+    WorldSpritePass* sprite_pass
 ) {
     if(sprite_pass->sprite_count == 0) {
         return;
@@ -665,7 +662,7 @@ static void render_world_sprites(
 static void render_text(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
-    TextPass const* text
+    TextPass* text
 ) {
     (void)state;
     (void)pass;
@@ -675,7 +672,7 @@ static void render_text(
 static void render_ui(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
-    UiPass const* ui
+    UiPass* ui
 ) {
     (void)state;
     (void)pass;
@@ -685,7 +682,7 @@ static void render_ui(
 static void render_debug(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
-    DebugPass const* debug
+    DebugPass* debug
 ) {
     (void)state;
     (void)pass;
@@ -774,8 +771,10 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
 
     WGPUDeviceDescriptor device_desc = {};
     device_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
-    device_desc.deviceLostCallbackInfo.callback = wgpu_device_lost_callback;
-    device_desc.uncapturedErrorCallbackInfo.callback = wgpu_error_callback;
+    device_desc.deviceLostCallbackInfo.callback =
+        (WGPUDeviceLostCallback)wgpu_device_lost_callback;
+    device_desc.uncapturedErrorCallbackInfo.callback =
+        (WGPUUncapturedErrorCallback)wgpu_error_callback;
 
     WGPURequestDeviceCallbackInfo device_cb = {};
 #if OS_EMSCRIPTEN
@@ -811,8 +810,10 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     WGPUSurfaceCapabilities surface_caps = {};
     wgpuSurfaceGetCapabilities(state->surface, state->adapter, &surface_caps);
     ASSERT(surface_caps.formatCount > 0, "No surface formats available");
-    state->surface_format =
-        pick_surface_format(surface_caps.formats, surface_caps.formatCount);
+    state->surface_format = pick_surface_format(
+        (WGPUTextureFormat*)surface_caps.formats,
+        surface_caps.formatCount
+    );
     if(!texture_format_is_srgb(state->surface_format)) {
         LOG_WARN("Surface does not expose an sRGB swapchain format");
     }
@@ -827,7 +828,7 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
 
     WGPUShaderSourceWGSL sprite_wgsl_source = {};
     sprite_wgsl_source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    sprite_wgsl_source.code.data = (char const*)sprite_shader_source.data;
+    sprite_wgsl_source.code.data = (const char*)sprite_shader_source.data;
     sprite_wgsl_source.code.length = (size_t)sprite_shader_source.size;
 
     WGPUShaderModuleDescriptor sprite_shader_desc = {};
@@ -846,7 +847,7 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     WGPUShaderSourceWGSL background_wgsl_source = {};
     background_wgsl_source.chain.sType = WGPUSType_ShaderSourceWGSL;
     background_wgsl_source.code.data =
-        (char const*)background_shader_source.data;
+        (const char*)background_shader_source.data;
     background_wgsl_source.code.length = (size_t)background_shader_source.size;
 
     WGPUShaderModuleDescriptor background_shader_desc = {};
@@ -1125,7 +1126,8 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     WGPUVertexBufferLayout background_buffer_layouts[2] = {};
     background_buffer_layouts[0].stepMode = WGPUVertexStepMode_Vertex;
     background_buffer_layouts[0].arrayStride = sizeof(f32) * 2;
-    background_buffer_layouts[0].attributeCount = ARRAY_COUNT(vertex_attributes);
+    background_buffer_layouts[0].attributeCount =
+        ARRAY_COUNT(vertex_attributes);
     background_buffer_layouts[0].attributes = vertex_attributes;
     background_buffer_layouts[1].stepMode = WGPUVertexStepMode_Instance;
     background_buffer_layouts[1].arrayStride = sizeof(ColorRectInstance);
@@ -1136,7 +1138,8 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     WGPUVertexState background_vertex_state = {};
     background_vertex_state.module = state->background_shader_module;
     background_vertex_state.entryPoint = {"vs_main", WGPU_STRLEN};
-    background_vertex_state.bufferCount = ARRAY_COUNT(background_buffer_layouts);
+    background_vertex_state.bufferCount =
+        ARRAY_COUNT(background_buffer_layouts);
     background_vertex_state.buffers = background_buffer_layouts;
 
     WGPUFragmentState background_fragment_state = {};

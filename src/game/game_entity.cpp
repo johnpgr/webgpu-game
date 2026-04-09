@@ -1,7 +1,5 @@
 #include "game/game_entity.h"
 
-#include <stdlib.h>
-
 #include "../../assets/sprites/atlas.h"
 #include "assets/assets_atlas.h"
 
@@ -20,9 +18,9 @@ internal f32 abs_f32(f32 value) {
     return (value < 0.0f) ? -value : value;
 }
 
-internal int compare_world_sprite_candidates(void const* lhs, void const* rhs) {
-    WorldSpriteCandidate const* a = (WorldSpriteCandidate const*)lhs;
-    WorldSpriteCandidate const* b = (WorldSpriteCandidate const*)rhs;
+internal int compare_world_sprite_candidates(void* lhs, void* rhs) {
+    WorldSpriteCandidate* a = (WorldSpriteCandidate*)lhs;
+    WorldSpriteCandidate* b = (WorldSpriteCandidate*)rhs;
 
     if(a->render_layer != b->render_layer) {
         return (a->render_layer < b->render_layer) ? -1 : 1;
@@ -34,6 +32,28 @@ internal int compare_world_sprite_candidates(void const* lhs, void const* rhs) {
         return (a->entity_index < b->entity_index) ? -1 : 1;
     }
     return 0;
+}
+
+internal void sort_world_sprite_candidates(
+    WorldSpriteCandidate* candidates,
+    u32 candidate_count
+) {
+    for(u32 i = 1; i < candidate_count; ++i) {
+        WorldSpriteCandidate value = candidates[i];
+        u32 insert_index = i;
+        while(insert_index > 0) {
+            if(compare_world_sprite_candidates(
+                   &candidates[insert_index - 1],
+                   &value
+               ) <= 0) {
+                break;
+            }
+
+            candidates[insert_index] = candidates[insert_index - 1];
+            insert_index--;
+        }
+        candidates[insert_index] = value;
+    }
 }
 
 internal void init_free_list(GameWorld* world) {
@@ -123,8 +143,8 @@ internal void update_visual_animation_state(GameWorld* world) {
                 }
             } else {
                 entity->visual_direction = (entity->velocity.y > 0.0f)
-                    ? ENTITY_VISUAL_DIRECTION_UP
-                    : ENTITY_VISUAL_DIRECTION_DOWN;
+                                               ? ENTITY_VISUAL_DIRECTION_UP
+                                               : ENTITY_VISUAL_DIRECTION_DOWN;
             }
         }
 
@@ -336,12 +356,16 @@ void world_extract_render(GameWorld* world, RenderFrame* frame) {
         u32 frame_count = atlas_animation_frame_count(entity->animation_id);
         if(frame_count > 0) {
             u32 frame_index = 0;
-            if(entity_has_property(entity->properties, ENTITY_PROPERTY_ANIMATED) &&
+            if(entity_has_property(
+                   entity->properties,
+                   ENTITY_PROPERTY_ANIMATED
+               ) &&
                frame_count > 1) {
                 frame_index =
                     (u32)(entity->animation_time * 8.0f) % frame_count;
             }
-            atlas_frame = atlas_animation_frame(entity->animation_id, frame_index);
+            atlas_frame =
+                atlas_animation_frame(entity->animation_id, frame_index);
         }
 
         if(atlas_frame.width_px <= 0.0f || atlas_frame.height_px <= 0.0f) {
@@ -366,22 +390,16 @@ void world_extract_render(GameWorld* world, RenderFrame* frame) {
     }
 
     if(candidate_count > 1) {
-        qsort(
-            candidates,
-            candidate_count,
-            sizeof(WorldSpriteCandidate),
-            compare_world_sprite_candidates
-        );
+        sort_world_sprite_candidates(candidates, candidate_count);
     }
 
     f32 far_depth = 0.75f;
     f32 near_depth = 0.05f;
     for(u32 i = 0; i < candidate_count; ++i) {
-        f32 t = (candidate_count > 1)
-            ? (f32)i / (f32)(candidate_count - 1)
-            : 0.0f;
+        f32 t =
+            (candidate_count > 1) ? (f32)i / (f32)(candidate_count - 1) : 0.0f;
         f32 depth = far_depth + (near_depth - far_depth) * t;
-        WorldSpriteCandidate const* candidate = &candidates[i];
+        WorldSpriteCandidate* candidate = &candidates[i];
         push_world_sprite(
             &frame->world_sprites,
             candidate->uv_min,

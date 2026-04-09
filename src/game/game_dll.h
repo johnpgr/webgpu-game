@@ -26,10 +26,10 @@ struct GameState {
 
 extern "C" {
 typedef GameState* (*game_init_fn)(Arena* arena, Atlas* atlas);
-typedef void (*game_update_fn)(GameState* game, GameInput const* input, f64 dt);
+typedef void (*game_update_fn)(GameState* game, GameInput* input, f64 dt);
 typedef u32 (*game_get_api_version_fn)(void);
 }
 
 EXPORT GameState* game_init(Arena* arena, Atlas* atlas);
-EXPORT void game_update(GameState* game, GameInput const* input, f64 dt);
+EXPORT void game_update(GameState* game, GameInput* input, f64 dt);
 EXPORT u32 game_get_api_version(void);

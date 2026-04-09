@@ -9,7 +9,7 @@
 #include <unistd.h>
 #endif
 
-FileData os_read_file(Arena* arena, char const* path) {
+FileData os_read_file(Arena* arena, const char* path) {
     ASSERT(arena != nullptr, "Arena must not be null!");
     ASSERT(path != nullptr, "Path must not be null!");
 
@@ -58,7 +58,7 @@ FileData os_read_file(Arena* arena, char const* path) {
     return result;
 }
 
-bool os_file_exists(char const* path) {
+bool os_file_exists(const char* path) {
     ASSERT(path != nullptr, "Path must not be null!");
 #if OS_WINDOWS
     DWORD attribs = GetFileAttributesA(path);
@@ -70,7 +70,7 @@ bool os_file_exists(char const* path) {
 #endif
 }
 
-u64 os_get_file_modified_time(char const* path) {
+u64 os_get_file_modified_time(const char* path) {
     ASSERT(path != nullptr, "Path must not be null!");
 #if OS_WINDOWS
     WIN32_FILE_ATTRIBUTE_DATA data;
@@ -90,7 +90,7 @@ u64 os_get_file_modified_time(char const* path) {
 #endif
 }
 
-bool os_copy_file(char const* src_path, char const* dst_path) {
+bool os_copy_file(const char* src_path, const char* dst_path) {
     ASSERT(src_path != nullptr, "Source path must not be null!");
     ASSERT(dst_path != nullptr, "Destination path must not be null!");
 
@@ -128,7 +128,7 @@ bool os_copy_file(char const* src_path, char const* dst_path) {
 #endif
 }
 
-bool os_delete_file(char const* path) {
+bool os_delete_file(const char* path) {
     ASSERT(path != nullptr, "Path must not be null!");
 #if OS_WINDOWS
     return DeleteFileA(path) != 0;

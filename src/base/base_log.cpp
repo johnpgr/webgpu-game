@@ -2,7 +2,7 @@
 
 #include "base/base_log.h"
 
-global char const* log_level_colors[] = {
+global const char* log_level_colors[] = {
     "\033[1;41m",
     "\033[1;31m",
     "\033[1;33m",
@@ -11,7 +11,7 @@ global char const* log_level_colors[] = {
     "\033[0;90m",
 };
 
-global char const* log_level_tags[] = {
+global const char* log_level_tags[] = {
     "[FATAL]",
     "[ERROR]",
     "[WARN]",
@@ -20,9 +20,9 @@ global char const* log_level_tags[] = {
     "[TRACE]",
 };
 
-global char const* log_color_reset = "\033[0m";
+global const char* log_color_reset = "\033[0m";
 
-void log_write_v(LogLevel level, char const* fmt, va_list args) {
+void log_write_v(LogLevel level, const char* fmt, va_list args) {
     char msg[16384];
     va_list args_copy;
     va_copy(args_copy, args);
@@ -45,7 +45,7 @@ void log_write_v(LogLevel level, char const* fmt, va_list args) {
     (void)fputs(out, stream);
 }
 
-void log_write(LogLevel level, char const* fmt, ...) {
+void log_write(LogLevel level, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     log_write_v(level, fmt, args);

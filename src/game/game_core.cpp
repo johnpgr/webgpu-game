@@ -177,7 +177,7 @@ EXPORT GameState* game_init(Arena* arena, Atlas* atlas) {
     return game;
 }
 
-EXPORT void game_update(GameState* game, GameInput const* input, f64 dt) {
+EXPORT void game_update(GameState* game, GameInput* input, f64 dt) {
     render_frame_reset(&game->render_frame);
     game->time += dt;
 

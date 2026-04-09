@@ -14,7 +14,7 @@
 #include "../../assets/sprites/atlas.h"
 #include "assets/assets_atlas.h"
 
-internal AtlasFrame atlas_frame_from_packed_sprite(AtlasSprite const* sprite) {
+internal AtlasFrame atlas_frame_from_packed_sprite(AtlasSprite* sprite) {
     AtlasFrame frame = {};
     if(sprite == nullptr) {
         return frame;
@@ -27,7 +27,7 @@ internal AtlasFrame atlas_frame_from_packed_sprite(AtlasSprite const* sprite) {
     return frame;
 }
 
-AtlasImage atlas_load_image(Arena* arena, char const* png_path) {
+AtlasImage atlas_load_image(Arena* arena, const char* png_path) {
     ASSERT(arena != nullptr, "Arena must not be null!");
     ASSERT(png_path != nullptr, "PNG path must not be null!");
 
@@ -89,7 +89,7 @@ AtlasImage atlas_load_image(Arena* arena, char const* png_path) {
     return image;
 }
 
-Atlas atlas_load(char const* png_path) {
+Atlas atlas_load(const char* png_path) {
     ASSERT(png_path != nullptr, "PNG path must not be null!");
 
     Atlas atlas = {};
@@ -117,7 +117,8 @@ AtlasFrame atlas_animation_frame(u32 animation_id, u32 frame_index) {
         return frame;
     }
 
-    AtlasAnimation const* animation = &atlas_animations[animation_id];
+    AtlasAnimation* animation =
+        (AtlasAnimation*)&atlas_animations[animation_id];
     if(frame_index >= (u32)animation->frame_count) {
         LOG_ERROR(
             "Atlas frame index out of bounds: animation=%u frame=%u",
@@ -129,5 +130,7 @@ AtlasFrame atlas_animation_frame(u32 animation_id, u32 frame_index) {
 
     u32 sprite_id = (u32)animation->first + frame_index;
     ASSERT(sprite_id < (u32)SPRITE_ID_COUNT, "Atlas sprite id out of bounds!");
-    return atlas_frame_from_packed_sprite(&atlas_sprites[sprite_id]);
+    return atlas_frame_from_packed_sprite(
+        (AtlasSprite*)&atlas_sprites[sprite_id]
+    );
 }

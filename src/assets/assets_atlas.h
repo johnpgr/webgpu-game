@@ -12,7 +12,7 @@ struct AtlasFrame {
 struct Atlas {
     u32 atlas_width;
     u32 atlas_height;
-    char const* image_path;
+    const char* image_path;
 };
 
 struct AtlasImage {
@@ -21,7 +21,7 @@ struct AtlasImage {
     u8* pixels;
 };
 
-Atlas atlas_load(char const* png_path);
-AtlasImage atlas_load_image(Arena* arena, char const* png_path);
+Atlas atlas_load(const char* png_path);
+AtlasImage atlas_load_image(Arena* arena, const char* png_path);
 u32 atlas_animation_frame_count(u32 animation_id);
 AtlasFrame atlas_animation_frame(u32 animation_id, u32 frame_index);

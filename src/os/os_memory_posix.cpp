@@ -5,7 +5,7 @@
 
 #include "os/os_mod.h"
 
-internal void os_fatal_system_call(char const* operation) {
+internal void os_fatal_system_call(const char* operation) {
     ASSERT(operation != nullptr, "Operation name must not be null!");
 
     int error = errno;

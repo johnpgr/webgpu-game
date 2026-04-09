@@ -28,7 +28,7 @@ struct LoadedGameCode {
     bool valid;
 };
 
-internal LoadedGameCode load_game_code(char const* source_dll_path) {
+internal LoadedGameCode load_game_code(const char* source_dll_path) {
     LoadedGameCode result = {};
 
     u64 source_time = os_get_file_modified_time(source_dll_path);
@@ -45,7 +45,7 @@ internal LoadedGameCode load_game_code(char const* source_dll_path) {
 
     SDL_memcpy(result.source_path, source_dll_path, path_len + 1);
 
-    static u32 load_counter = 0;
+    local_persist u32 load_counter = 0;
     load_counter++;
     char temp_path[512];
     SDL_snprintf(
@@ -167,7 +167,8 @@ internal u64 app_get_target_frame_ns(SDL_Window* window) {
         return SDL_NS_PER_SECOND / 60ULL;
     }
 
-    SDL_DisplayMode const* mode = SDL_GetCurrentDisplayMode(display);
+    SDL_DisplayMode* mode =
+        (SDL_DisplayMode*)SDL_GetCurrentDisplayMode(display);
     if(mode == nullptr) {
         return SDL_NS_PER_SECOND / 60ULL;
     }
@@ -287,7 +288,7 @@ internal void app_tick(void* arg) {
     }
 
     int key_count = 0;
-    bool const* keys = SDL_GetKeyboardState(&key_count);
+    bool* keys = (bool*)SDL_GetKeyboardState(&key_count);
     (void)key_count;
 
     GameInput input = {};
@@ -392,11 +393,11 @@ int main(int argc, char** argv) {
     }
 #else
 #if OS_WINDOWS
-    char const* game_dll_path = "bin/game_code.dll";
+    const char* game_dll_path = "bin/game_code.dll";
 #elif OS_MAC
-    char const* game_dll_path = "bin/game_code.dylib";
+    const char* game_dll_path = "bin/game_code.dylib";
 #else
-    char const* game_dll_path = "bin/game_code.so";
+    const char* game_dll_path = "bin/game_code.so";
 #endif
     app.game_code = load_game_code(game_dll_path);
     if(!app.game_code.valid) {

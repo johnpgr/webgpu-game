@@ -7,8 +7,8 @@ struct FileData {
     u64 size;
 };
 
-FileData os_read_file(Arena* arena, char const* path);
-bool os_file_exists(char const* path);
-u64 os_get_file_modified_time(char const* path);
-bool os_copy_file(char const* src_path, char const* dst_path);
-bool os_delete_file(char const* path);
+FileData os_read_file(Arena* arena, const char* path);
+bool os_file_exists(const char* path);
+u64 os_get_file_modified_time(const char* path);
+bool os_copy_file(const char* src_path, const char* dst_path);
+bool os_delete_file(const char* path);

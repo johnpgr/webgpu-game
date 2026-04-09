@@ -7,7 +7,7 @@
 String string_substring(String source, u64 start, u64 end) {
     u64 safe_end = (end > source.size) ? source.size : end;
     u64 safe_start = (start > safe_end) ? safe_end : start;
-    u8 const* start_ptr =
+    u8* start_ptr =
         (source.str != nullptr) ? (source.str + safe_start) : nullptr;
     String result = {start_ptr, safe_end - safe_start};
     return result;
@@ -43,15 +43,15 @@ i32 string_compare(String a, String b) {
     return 0;
 }
 
-String string_lit(char const* s) {
+String string_lit(const char* s) {
     ASSERT(s != nullptr, "String literal source must not be null!");
-    String result = {(u8 const*)s, (u64)strlen(s)};
+    String result = {(u8*)s, (u64)strlen(s)};
     return result;
 }
 
-String string_from_cstr(char const* s) {
+String string_from_cstr(const char* s) {
     ASSERT(s != nullptr, "String source must not be null!");
-    String result = {(u8 const*)s, (u64)strlen(s)};
+    String result = {(u8*)s, (u64)strlen(s)};
     return result;
 }
 
@@ -71,15 +71,15 @@ String string_copy(Arena* arena, String source) {
     return result;
 }
 
-char const* string_to_cstr(Arena* arena, String source) {
-    return (char const*)string_copy(arena, source).str;
+const char* string_to_cstr(Arena* arena, String source) {
+    return (const char*)string_copy(arena, source).str;
 }
 
-String string_copy_cstr(Arena* arena, char const* source) {
+String string_copy_cstr(Arena* arena, const char* source) {
     return string_copy(arena, string_from_cstr(source));
 }
 
-String string_fmt(Arena* arena, char const* format, ...) {
+String string_fmt(Arena* arena, const char* format, ...) {
     va_list args;
     va_start(args, format);
 
