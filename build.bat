@@ -191,10 +191,14 @@ if "%web_run%"=="1" (
 )
 
 if "%run%"=="1" if "%game%"=="" if "%web%"=="" set web=1
-if "%game%"=="" if "%web%"=="" set game=1
+if "%game%"=="" if "%web%"=="" if "%dll%"=="" set game=1
 
-:: --- Build Native Game (Win32) ----------------------------------------------
-if "%game%"=="1" (
+:: --- Build Native Game or DLL (Win32) ----------------------------------------
+set build_native=0
+if "%game%"=="1" set build_native=1
+if "%dll%"=="1" set build_native=1
+
+if "!build_native!"=="1" (
     set webgpu_dir=%root_dir%\vendor\webgpu
     set sdl3_dir=%root_dir%\vendor\SDL3
     set sdl3_image_dir=%root_dir%\vendor\SDL3_image
@@ -225,23 +229,27 @@ if "%game%"=="1" (
     set host_libs=/LIBPATH:"%webgpu_dir%\lib" /LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" wgpu_native.lib SDL3_image.lib SDL3.lib user32.lib gdi32.lib shell32.lib
     set dll_libs=/LIBPATH:"%sdl3_dir%\lib\x64" /LIBPATH:"%sdl3_image_dir%\lib\x64" SDL3_image.lib SDL3.lib
 
-    if exist "%root_dir%\assets" (
-        xcopy /s /y "%root_dir%\assets" "%bin_dir%\assets\" >nul 2>&1
-    )
+    if "%game%"=="1" (
+        if exist "%root_dir%\assets" (
+            xcopy /s /y "%root_dir%\assets" "%bin_dir%\assets\" >nul 2>&1
+        )
 
-    if exist "%webgpu_dir%\lib\wgpu_native.dll" copy /y "%webgpu_dir%\lib\wgpu_native.dll" "%bin_dir%\" >nul 2>&1
-    if exist "%sdl3_dir%\lib\x64\SDL3.dll" copy /y "%sdl3_dir%\lib\x64\SDL3.dll" "%bin_dir%\" >nul 2>&1
-    if exist "%sdl3_image_dir%\lib\x64\SDL3_image.dll" copy /y "%sdl3_image_dir%\lib\x64\SDL3_image.dll" "%bin_dir%\" >nul 2>&1
+        if exist "%webgpu_dir%\lib\wgpu_native.dll" copy /y "%webgpu_dir%\lib\wgpu_native.dll" "%bin_dir%\" >nul 2>&1
+        if exist "%sdl3_dir%\lib\x64\SDL3.dll" copy /y "%sdl3_dir%\lib\x64\SDL3.dll" "%bin_dir%\" >nul 2>&1
+        if exist "%sdl3_image_dir%\lib\x64\SDL3_image.dll" copy /y "%sdl3_image_dir%\lib\x64\SDL3_image.dll" "%bin_dir%\" >nul 2>&1
+    )
 
     pushd "%bin_dir%"
     set didbuild=1
 
-    echo Building game host executable...
-    !compile! "%src_dir%\app\game_main.cpp" /link !host_libs! /out:"%bin_dir%\game_host.exe" || (
-        popd
-        exit /b 1
+    if "%game%"=="1" (
+        echo Building game host executable...
+        !compile! "%src_dir%\app\game_main.cpp" /link !host_libs! /out:"%bin_dir%\game_host.exe" || (
+            popd
+            exit /b 1
+        )
+        echo Built %bin_dir%\game_host.exe
     )
-    echo Built %bin_dir%\game_host.exe
 
     echo Building game DLL...
     !compile! /LD "%src_dir%\game\game_dll_main.cpp" /link !dll_libs! /out:"%bin_dir%\game_code.dll" || (
@@ -295,7 +303,7 @@ if "%run%"=="1" (
 
 :: --- Warn On No Builds -------------------------------------------------------
 if "%didbuild%"=="" if not "%run%"=="1" (
-    echo [WARNING] no valid build target. usage: build [vendor] [game] [web^|web_run] [run] [debug^|release]
+    echo [WARNING] no valid build target. usage: build [vendor] [game^|dll] [web^|web_run] [run] [debug^|release]
     exit /b 1
 )
 

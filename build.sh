@@ -25,7 +25,7 @@ if [ "${run:-}" = "1" ] && [ -z "${game:-}" ] && [ -z "${web:-}" ]; then
 fi
 
 # Default target remains native game build.
-if [ -z "${game:-}" ] && [ -z "${web:-}" ]; then
+if [ -z "${game:-}" ] && [ -z "${web:-}" ] && [ -z "${dll:-}" ]; then
   game=1
 fi
 
@@ -232,7 +232,7 @@ warning_flags="-Wall -Wextra -Wno-unused-function -Wno-missing-field-initializer
 didbuild=""
 
 # --- Build Native Game (desktop) ---------------------------------------------
-if [ "${game:-}" = "1" ]; then
+if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   # --- Detect Platform -------------------------------------------------------
   case "$(uname -s)" in
   Darwin) platform=macos ;;
@@ -352,26 +352,30 @@ if [ "${game:-}" = "1" ]; then
   # --- Prep Directories ------------------------------------------------------
   mkdir -p "$bin_dir"
 
-  # --- Copy Assets -----------------------------------------------------------
-  if [ -d "$root_dir/assets" ]; then
-    cp -r "$root_dir/assets" "$bin_dir/"
-  fi
-
-  # --- Copy shared libs to bin -----------------------------------------------
-  for d in "$root_dir/vendor/SDL3/lib64" "$root_dir/vendor/SDL3/lib" "$root_dir/vendor/SDL3_image/lib64" "$root_dir/vendor/SDL3_image/lib" "$root_dir/vendor/webgpu/lib"; do
-    if [ -d "$d" ]; then
-      for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
-        [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
-      done
+  if [ "${game:-}" = "1" ]; then
+    # --- Copy Assets -----------------------------------------------------------
+    if [ -d "$root_dir/assets" ]; then
+      cp -r "$root_dir/assets" "$bin_dir/"
     fi
-  done
+
+    # --- Copy shared libs to bin -----------------------------------------------
+    for d in "$root_dir/vendor/SDL3/lib64" "$root_dir/vendor/SDL3/lib" "$root_dir/vendor/SDL3_image/lib64" "$root_dir/vendor/SDL3_image/lib" "$root_dir/vendor/webgpu/lib"; do
+      if [ -d "$d" ]; then
+        for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
+          [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
+        done
+      fi
+    done
+  fi
 
   # --- Build Native Targets --------------------------------------------------
   didbuild=1
 
-  echo "Building game host executable..."
-  $compile "$src_dir/app/game_main.cpp" $host_link -o "$bin_dir/game_host"
-  echo "Built $bin_dir/game_host"
+  if [ "${game:-}" = "1" ]; then
+    echo "Building game host executable..."
+    $compile "$src_dir/app/game_main.cpp" $host_link -o "$bin_dir/game_host"
+    echo "Built $bin_dir/game_host"
+  fi
 
   echo "Building game shared library..."
   if [ "$platform" = "macos" ]; then
@@ -438,6 +442,6 @@ fi
 
 # --- Warn On No Builds -------------------------------------------------------
 if [ -z "$didbuild" ] && [ "${run:-}" != "1" ]; then
-  echo "[WARNING] no valid build target. usage: ./build.sh [vendor] [game] [web|web_run] [debug|release]" >&2
+  echo "[WARNING] no valid build target. usage: ./build.sh [vendor] [game|dll] [web|web_run] [debug|release]" >&2
     exit 1
 fi
