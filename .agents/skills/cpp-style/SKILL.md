@@ -71,12 +71,12 @@ Follow this checklist for every piece of code you write under this style:
 - Group related functions by the data they operate on, not by attaching them to a type.
 - Use a "unity build" / single-compilation-unit model when showing build setup. One `.cpp` file `#include`s
   all the others.
-- Prefer `internal` (i.e. `static`) for file-scoped functions and `global_variable` for file-scoped globals,
+- Prefer `internal` (i.e. `static`) for file-scoped functions and `global` for file-scoped globals,
   defined as macros:
   ```cpp
   #define internal        static
+  #define global          static
   #define local_persist   static
-  #define global_variable static
   ```
 
 ### Naming (Rust-like)

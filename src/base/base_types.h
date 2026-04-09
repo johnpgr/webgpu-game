@@ -16,9 +16,9 @@ typedef ptrdiff_t isize;
 typedef float f32;
 typedef double f64;
 
-#define internal static
+#define internal      static
+#define global        static
 #define local_persist static
-#define global_variable static
 
 union vec2 {
     struct {

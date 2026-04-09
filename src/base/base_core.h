@@ -189,7 +189,7 @@ inline f64 get_ticks_f64(void) {
 #endif
 
 #if OS_WINDOWS
-#define GAME_DLL_EXPORT extern "C" __declspec(dllexport)
+#define EXPORT extern "C" __declspec(dllexport)
 #else
-#define GAME_DLL_EXPORT extern "C"
+#define EXPORT extern "C"
 #endif

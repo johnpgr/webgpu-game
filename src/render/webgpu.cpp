@@ -43,9 +43,11 @@ struct WebGPUState {
     SDL_MetalView metal_view;
 #endif
 
-    WGPUShaderModule shader_module;
+    WGPUShaderModule sprite_shader_module;
+    WGPUShaderModule background_shader_module;
     WGPUPipelineLayout pipeline_layout;
-    WGPURenderPipeline render_pipeline;
+    WGPURenderPipeline sprite_pipeline;
+    WGPURenderPipeline background_pipeline;
     WGPUBindGroupLayout bind_group_layout;
     WGPUBindGroup bind_group;
 
@@ -58,6 +60,8 @@ struct WebGPUState {
 
     WGPUBuffer instance_buffer;
     u32 instance_buffer_capacity;
+    WGPUBuffer background_instance_buffer;
+    u32 background_instance_buffer_capacity;
 
     WGPUTexture depth_texture;
     WGPUTextureView depth_view;
@@ -371,6 +375,24 @@ static void ensure_instance_buffer(WebGPUState* state, u32 required) {
     state->instance_buffer_capacity = new_capacity;
 }
 
+static void ensure_background_instance_buffer(WebGPUState* state, u32 required) {
+    if(required <= state->background_instance_buffer_capacity) {
+        return;
+    }
+
+    u32 new_capacity = next_pow2_u32(required);
+    if(state->background_instance_buffer) {
+        wgpuBufferRelease(state->background_instance_buffer);
+    }
+
+    state->background_instance_buffer = create_buffer(
+        state->device,
+        (u64)sizeof(ColorRectInstance) * (u64)new_capacity,
+        WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst
+    );
+    state->background_instance_buffer_capacity = new_capacity;
+}
+
 static void write_world_camera_uniform(
     WebGPUState* state,
     WorldCamera const* camera,
@@ -420,14 +442,72 @@ static void upload_world_sprites(
     );
 }
 
+static void upload_background_rects(
+    WebGPUState* state,
+    BackgroundPass const* backgrounds
+) {
+    if(backgrounds->rect_count == 0) {
+        return;
+    }
+
+    ensure_background_instance_buffer(state, backgrounds->rect_count);
+    wgpuQueueWriteBuffer(
+        state->queue,
+        state->background_instance_buffer,
+        0,
+        backgrounds->rects,
+        (size_t)((u64)sizeof(ColorRectInstance) * (u64)backgrounds->rect_count)
+    );
+}
+
 static void render_backgrounds(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     BackgroundPass const* backgrounds
 ) {
-    (void)state;
-    (void)pass;
-    (void)backgrounds;
+    if(backgrounds->rect_count == 0) {
+        return;
+    }
+
+    write_world_camera_uniform(
+        state,
+        &backgrounds->camera,
+        state->surface_width,
+        state->surface_height
+    );
+    upload_background_rects(state, backgrounds);
+
+    wgpuRenderPassEncoderSetPipeline(pass, state->background_pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, state->bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetVertexBuffer(
+        pass,
+        0,
+        state->vertex_buffer,
+        0,
+        sizeof(f32) * 8
+    );
+    wgpuRenderPassEncoderSetVertexBuffer(
+        pass,
+        1,
+        state->background_instance_buffer,
+        0,
+        (u64)sizeof(ColorRectInstance) * (u64)backgrounds->rect_count
+    );
+    wgpuRenderPassEncoderSetIndexBuffer(
+        pass,
+        state->index_buffer,
+        WGPUIndexFormat_Uint16,
+        0,
+        sizeof(u16) * 6
+    );
+    wgpuRenderPassEncoderDrawIndexed(
+        pass,
+        6,
+        backgrounds->rect_count,
+        0,
+        0,
+        0
+    );
 }
 
 static void render_world_sprites(
@@ -447,7 +527,7 @@ static void render_world_sprites(
     );
     upload_world_sprites(state, sprite_pass);
 
-    wgpuRenderPassEncoderSetPipeline(pass, state->render_pipeline);
+    wgpuRenderPassEncoderSetPipeline(pass, state->sprite_pipeline);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, state->bind_group, 0, nullptr);
     wgpuRenderPassEncoderSetVertexBuffer(
         pass,
@@ -632,21 +712,41 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     state->surface_format = surface_caps.formats[0];
     wgpuSurfaceCapabilitiesFreeMembers(surface_caps);
 
-    FileData shader_source = os_read_file(arena, "assets/shaders/sprite.wgsl");
-    if(shader_source.data == nullptr || shader_source.size == 0) {
+    FileData sprite_shader_source =
+        os_read_file(arena, "assets/shaders/sprite.wgsl");
+    if(sprite_shader_source.data == nullptr || sprite_shader_source.size == 0) {
         LOG_FATAL("Failed to load sprite shader");
         return result;
     }
 
-    WGPUShaderSourceWGSL wgsl_source = {};
-    wgsl_source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgsl_source.code.data = (char const*)shader_source.data;
-    wgsl_source.code.length = (size_t)shader_source.size;
+    WGPUShaderSourceWGSL sprite_wgsl_source = {};
+    sprite_wgsl_source.chain.sType = WGPUSType_ShaderSourceWGSL;
+    sprite_wgsl_source.code.data = (char const*)sprite_shader_source.data;
+    sprite_wgsl_source.code.length = (size_t)sprite_shader_source.size;
 
-    WGPUShaderModuleDescriptor shader_desc = {};
-    shader_desc.nextInChain = &wgsl_source.chain;
-    state->shader_module =
-        wgpuDeviceCreateShaderModule(state->device, &shader_desc);
+    WGPUShaderModuleDescriptor sprite_shader_desc = {};
+    sprite_shader_desc.nextInChain = &sprite_wgsl_source.chain;
+    state->sprite_shader_module =
+        wgpuDeviceCreateShaderModule(state->device, &sprite_shader_desc);
+
+    FileData background_shader_source =
+        os_read_file(arena, "assets/shaders/color_rect.wgsl");
+    if(background_shader_source.data == nullptr ||
+       background_shader_source.size == 0) {
+        LOG_FATAL("Failed to load color rect shader");
+        return result;
+    }
+
+    WGPUShaderSourceWGSL background_wgsl_source = {};
+    background_wgsl_source.chain.sType = WGPUSType_ShaderSourceWGSL;
+    background_wgsl_source.code.data =
+        (char const*)background_shader_source.data;
+    background_wgsl_source.code.length = (size_t)background_shader_source.size;
+
+    WGPUShaderModuleDescriptor background_shader_desc = {};
+    background_shader_desc.nextInChain = &background_wgsl_source.chain;
+    state->background_shader_module =
+        wgpuDeviceCreateShaderModule(state->device, &background_shader_desc);
 
     Temp atlas_upload_temp = temp_begin(arena);
     AtlasImage atlas_image = atlas_load_image(arena, atlas->image_path);
@@ -758,6 +858,12 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
         (u64)sizeof(SpriteInstance) * 1024ULL,
         WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst
     );
+    state->background_instance_buffer_capacity = 256;
+    state->background_instance_buffer = create_buffer(
+        state->device,
+        (u64)sizeof(ColorRectInstance) * 256ULL,
+        WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst
+    );
 
     WGPUBindGroupLayoutEntry bind_layout_entries[3] = {};
     bind_layout_entries[0].binding = 0;
@@ -809,41 +915,42 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     vertex_attributes[0].format = WGPUVertexFormat_Float32x2;
     vertex_attributes[0].offset = 0;
 
-    WGPUVertexAttribute instance_attributes[6] = {};
-    instance_attributes[0].shaderLocation = 1;
-    instance_attributes[0].format = WGPUVertexFormat_Float32x2;
-    instance_attributes[0].offset = 0;
-    instance_attributes[1].shaderLocation = 2;
-    instance_attributes[1].format = WGPUVertexFormat_Float32x2;
-    instance_attributes[1].offset = 8;
-    instance_attributes[2].shaderLocation = 3;
-    instance_attributes[2].format = WGPUVertexFormat_Float32x2;
-    instance_attributes[2].offset = 16;
-    instance_attributes[3].shaderLocation = 4;
-    instance_attributes[3].format = WGPUVertexFormat_Float32x2;
-    instance_attributes[3].offset = 24;
-    instance_attributes[4].shaderLocation = 5;
-    instance_attributes[4].format = WGPUVertexFormat_Float32;
-    instance_attributes[4].offset = 32;
-    instance_attributes[5].shaderLocation = 6;
-    instance_attributes[5].format = WGPUVertexFormat_Float32x4;
-    instance_attributes[5].offset = 36;
+    WGPUVertexAttribute sprite_instance_attributes[6] = {};
+    sprite_instance_attributes[0].shaderLocation = 1;
+    sprite_instance_attributes[0].format = WGPUVertexFormat_Float32x2;
+    sprite_instance_attributes[0].offset = 0;
+    sprite_instance_attributes[1].shaderLocation = 2;
+    sprite_instance_attributes[1].format = WGPUVertexFormat_Float32x2;
+    sprite_instance_attributes[1].offset = 8;
+    sprite_instance_attributes[2].shaderLocation = 3;
+    sprite_instance_attributes[2].format = WGPUVertexFormat_Float32x2;
+    sprite_instance_attributes[2].offset = 16;
+    sprite_instance_attributes[3].shaderLocation = 4;
+    sprite_instance_attributes[3].format = WGPUVertexFormat_Float32x2;
+    sprite_instance_attributes[3].offset = 24;
+    sprite_instance_attributes[4].shaderLocation = 5;
+    sprite_instance_attributes[4].format = WGPUVertexFormat_Float32;
+    sprite_instance_attributes[4].offset = 32;
+    sprite_instance_attributes[5].shaderLocation = 6;
+    sprite_instance_attributes[5].format = WGPUVertexFormat_Float32x4;
+    sprite_instance_attributes[5].offset = 36;
 
-    WGPUVertexBufferLayout buffer_layouts[2] = {};
-    buffer_layouts[0].stepMode = WGPUVertexStepMode_Vertex;
-    buffer_layouts[0].arrayStride = sizeof(f32) * 2;
-    buffer_layouts[0].attributeCount = ARRAY_COUNT(vertex_attributes);
-    buffer_layouts[0].attributes = vertex_attributes;
-    buffer_layouts[1].stepMode = WGPUVertexStepMode_Instance;
-    buffer_layouts[1].arrayStride = sizeof(SpriteInstance);
-    buffer_layouts[1].attributeCount = ARRAY_COUNT(instance_attributes);
-    buffer_layouts[1].attributes = instance_attributes;
+    WGPUVertexBufferLayout sprite_buffer_layouts[2] = {};
+    sprite_buffer_layouts[0].stepMode = WGPUVertexStepMode_Vertex;
+    sprite_buffer_layouts[0].arrayStride = sizeof(f32) * 2;
+    sprite_buffer_layouts[0].attributeCount = ARRAY_COUNT(vertex_attributes);
+    sprite_buffer_layouts[0].attributes = vertex_attributes;
+    sprite_buffer_layouts[1].stepMode = WGPUVertexStepMode_Instance;
+    sprite_buffer_layouts[1].arrayStride = sizeof(SpriteInstance);
+    sprite_buffer_layouts[1].attributeCount =
+        ARRAY_COUNT(sprite_instance_attributes);
+    sprite_buffer_layouts[1].attributes = sprite_instance_attributes;
 
-    WGPUVertexState vertex_state = {};
-    vertex_state.module = state->shader_module;
-    vertex_state.entryPoint = {"vs_main", WGPU_STRLEN};
-    vertex_state.bufferCount = ARRAY_COUNT(buffer_layouts);
-    vertex_state.buffers = buffer_layouts;
+    WGPUVertexState sprite_vertex_state = {};
+    sprite_vertex_state.module = state->sprite_shader_module;
+    sprite_vertex_state.entryPoint = {"vs_main", WGPU_STRLEN};
+    sprite_vertex_state.bufferCount = ARRAY_COUNT(sprite_buffer_layouts);
+    sprite_vertex_state.buffers = sprite_buffer_layouts;
 
     WGPUBlendComponent color_blend = {};
     color_blend.operation = WGPUBlendOperation_Add;
@@ -864,11 +971,11 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     color_target.blend = &blend_state;
     color_target.writeMask = WGPUColorWriteMask_All;
 
-    WGPUFragmentState fragment_state = {};
-    fragment_state.module = state->shader_module;
-    fragment_state.entryPoint = {"fs_main", WGPU_STRLEN};
-    fragment_state.targetCount = 1;
-    fragment_state.targets = &color_target;
+    WGPUFragmentState sprite_fragment_state = {};
+    sprite_fragment_state.module = state->sprite_shader_module;
+    sprite_fragment_state.entryPoint = {"fs_main", WGPU_STRLEN};
+    sprite_fragment_state.targetCount = 1;
+    sprite_fragment_state.targets = &color_target;
 
     WGPUPrimitiveState primitive_state = {};
     primitive_state.topology = WGPUPrimitiveTopology_TriangleList;
@@ -885,15 +992,64 @@ WebGPURenderer init_webgpu(SDL_Window* window, Arena* arena, Atlas* atlas) {
     multisample.mask = ~0u;
     multisample.alphaToCoverageEnabled = false;
 
-    WGPURenderPipelineDescriptor pipeline_desc = {};
-    pipeline_desc.layout = state->pipeline_layout;
-    pipeline_desc.vertex = vertex_state;
-    pipeline_desc.primitive = primitive_state;
-    pipeline_desc.depthStencil = &depth_state;
-    pipeline_desc.multisample = multisample;
-    pipeline_desc.fragment = &fragment_state;
-    state->render_pipeline =
-        wgpuDeviceCreateRenderPipeline(state->device, &pipeline_desc);
+    WGPURenderPipelineDescriptor sprite_pipeline_desc = {};
+    sprite_pipeline_desc.layout = state->pipeline_layout;
+    sprite_pipeline_desc.vertex = sprite_vertex_state;
+    sprite_pipeline_desc.primitive = primitive_state;
+    sprite_pipeline_desc.depthStencil = &depth_state;
+    sprite_pipeline_desc.multisample = multisample;
+    sprite_pipeline_desc.fragment = &sprite_fragment_state;
+    state->sprite_pipeline =
+        wgpuDeviceCreateRenderPipeline(state->device, &sprite_pipeline_desc);
+
+    WGPUVertexAttribute background_instance_attributes[4] = {};
+    background_instance_attributes[0].shaderLocation = 1;
+    background_instance_attributes[0].format = WGPUVertexFormat_Float32x2;
+    background_instance_attributes[0].offset = 0;
+    background_instance_attributes[1].shaderLocation = 2;
+    background_instance_attributes[1].format = WGPUVertexFormat_Float32x2;
+    background_instance_attributes[1].offset = 8;
+    background_instance_attributes[2].shaderLocation = 3;
+    background_instance_attributes[2].format = WGPUVertexFormat_Float32;
+    background_instance_attributes[2].offset = 16;
+    background_instance_attributes[3].shaderLocation = 4;
+    background_instance_attributes[3].format = WGPUVertexFormat_Float32x4;
+    background_instance_attributes[3].offset = 20;
+
+    WGPUVertexBufferLayout background_buffer_layouts[2] = {};
+    background_buffer_layouts[0].stepMode = WGPUVertexStepMode_Vertex;
+    background_buffer_layouts[0].arrayStride = sizeof(f32) * 2;
+    background_buffer_layouts[0].attributeCount = ARRAY_COUNT(vertex_attributes);
+    background_buffer_layouts[0].attributes = vertex_attributes;
+    background_buffer_layouts[1].stepMode = WGPUVertexStepMode_Instance;
+    background_buffer_layouts[1].arrayStride = sizeof(ColorRectInstance);
+    background_buffer_layouts[1].attributeCount =
+        ARRAY_COUNT(background_instance_attributes);
+    background_buffer_layouts[1].attributes = background_instance_attributes;
+
+    WGPUVertexState background_vertex_state = {};
+    background_vertex_state.module = state->background_shader_module;
+    background_vertex_state.entryPoint = {"vs_main", WGPU_STRLEN};
+    background_vertex_state.bufferCount = ARRAY_COUNT(background_buffer_layouts);
+    background_vertex_state.buffers = background_buffer_layouts;
+
+    WGPUFragmentState background_fragment_state = {};
+    background_fragment_state.module = state->background_shader_module;
+    background_fragment_state.entryPoint = {"fs_main", WGPU_STRLEN};
+    background_fragment_state.targetCount = 1;
+    background_fragment_state.targets = &color_target;
+
+    WGPURenderPipelineDescriptor background_pipeline_desc = {};
+    background_pipeline_desc.layout = state->pipeline_layout;
+    background_pipeline_desc.vertex = background_vertex_state;
+    background_pipeline_desc.primitive = primitive_state;
+    background_pipeline_desc.depthStencil = &depth_state;
+    background_pipeline_desc.multisample = multisample;
+    background_pipeline_desc.fragment = &background_fragment_state;
+    state->background_pipeline = wgpuDeviceCreateRenderPipeline(
+        state->device,
+        &background_pipeline_desc
+    );
 
     result.internal_state = state;
 #if !OS_EMSCRIPTEN
@@ -921,8 +1077,11 @@ void cleanup_webgpu(WebGPURenderer* renderer) {
     if(state->depth_texture) {
         wgpuTextureRelease(state->depth_texture);
     }
-    if(state->render_pipeline) {
-        wgpuRenderPipelineRelease(state->render_pipeline);
+    if(state->background_pipeline) {
+        wgpuRenderPipelineRelease(state->background_pipeline);
+    }
+    if(state->sprite_pipeline) {
+        wgpuRenderPipelineRelease(state->sprite_pipeline);
     }
     if(state->pipeline_layout) {
         wgpuPipelineLayoutRelease(state->pipeline_layout);
@@ -935,6 +1094,9 @@ void cleanup_webgpu(WebGPURenderer* renderer) {
     }
     if(state->instance_buffer) {
         wgpuBufferRelease(state->instance_buffer);
+    }
+    if(state->background_instance_buffer) {
+        wgpuBufferRelease(state->background_instance_buffer);
     }
     if(state->vertex_buffer) {
         wgpuBufferRelease(state->vertex_buffer);
@@ -954,8 +1116,11 @@ void cleanup_webgpu(WebGPURenderer* renderer) {
     if(state->atlas_texture) {
         wgpuTextureRelease(state->atlas_texture);
     }
-    if(state->shader_module) {
-        wgpuShaderModuleRelease(state->shader_module);
+    if(state->background_shader_module) {
+        wgpuShaderModuleRelease(state->background_shader_module);
+    }
+    if(state->sprite_shader_module) {
+        wgpuShaderModuleRelease(state->sprite_shader_module);
     }
     if(state->surface) {
         wgpuSurfaceRelease(state->surface);

@@ -12,9 +12,27 @@ struct SpriteInstance {
 };
 static_assert(sizeof(SpriteInstance) == 52, "SpriteInstance must be 52 bytes");
 
+struct ColorRectInstance {
+    vec2 position;
+    vec2 size;
+    f32 depth;
+    vec4 color;
+};
+static_assert(
+    sizeof(ColorRectInstance) == 36,
+    "ColorRectInstance must be 36 bytes"
+);
+
 struct WorldCamera {
     vec2 position;
     f32 zoom;
+};
+
+struct BackgroundPass {
+    WorldCamera camera;
+    ColorRectInstance* rects;
+    u32 rect_count;
+    u32 rect_capacity;
 };
 
 struct WorldSpritePass {
@@ -24,7 +42,6 @@ struct WorldSpritePass {
     u32 sprite_capacity;
 };
 
-struct BackgroundPass {};
 struct TextPass {};
 struct UiPass {};
 struct DebugPass {};
@@ -37,6 +54,16 @@ struct RenderFrame {
     UiPass ui;
     DebugPass debug;
 };
+
+BackgroundPass create_background_pass(Arena* arena, u32 initial_capacity);
+void background_pass_reset(BackgroundPass* pass);
+void push_background_rect(
+    BackgroundPass* pass,
+    vec2 position,
+    vec2 size,
+    f32 depth,
+    vec4 color
+);
 
 WorldSpritePass create_world_sprite_pass(Arena* arena, u32 initial_capacity);
 void world_sprite_pass_reset(WorldSpritePass* pass);

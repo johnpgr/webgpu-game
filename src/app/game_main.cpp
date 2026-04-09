@@ -286,11 +286,31 @@ internal void app_tick(void* arg) {
         }
     }
 
+    int key_count = 0;
+    bool const* keys = SDL_GetKeyboardState(&key_count);
+    (void)key_count;
+
+    GameInput input = {};
+    if(keys != nullptr) {
+        if(keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]) {
+            input.move_x -= 1.0f;
+        }
+        if(keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) {
+            input.move_x += 1.0f;
+        }
+        if(keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) {
+            input.move_y -= 1.0f;
+        }
+        if(keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]) {
+            input.move_y += 1.0f;
+        }
+    }
+
 #if OS_EMSCRIPTEN
-    game_update(app->game, dt);
+    game_update(app->game, &input, dt);
 #else
     if(app->game_code.valid && app->game_code.game_update) {
-        app->game_code.game_update(app->game, dt);
+        app->game_code.game_update(app->game, &input, dt);
     }
 #endif
 

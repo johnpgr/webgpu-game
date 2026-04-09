@@ -2,7 +2,7 @@
 
 #include "base/base_log.h"
 
-global_variable char const* log_level_colors[] = {
+global char const* log_level_colors[] = {
     "\033[1;41m",
     "\033[1;31m",
     "\033[1;33m",
@@ -11,7 +11,7 @@ global_variable char const* log_level_colors[] = {
     "\033[0;90m",
 };
 
-global_variable char const* log_level_tags[] = {
+global char const* log_level_tags[] = {
     "[FATAL]",
     "[ERROR]",
     "[WARN]",
@@ -20,7 +20,7 @@ global_variable char const* log_level_tags[] = {
     "[TRACE]",
 };
 
-global_variable char const* log_color_reset = "\033[0m";
+global char const* log_color_reset = "\033[0m";
 
 void log_write_v(LogLevel level, char const* fmt, va_list args) {
     char msg[16384];

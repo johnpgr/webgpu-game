@@ -357,8 +357,8 @@ end_temporary_memory(temp_mem);
 ```cpp
 // Scope control macros
 #define internal        static
+#define global          static
 #define local_persist   static
-#define global_variable static
 
 // Build configuration
 #define HANDMADE_INTERNAL 1   // Enable development tools
