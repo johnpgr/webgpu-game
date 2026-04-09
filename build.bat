@@ -11,7 +11,19 @@ if "%release%"=="1" set debug=0 && echo [release mode]
 set root_dir=%cd%
 set vendor_dir=%root_dir%\vendor
 
-:: --- Download Vendor Dependencies --------------------------------------------
+if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
+    set host_arch=x64
+) else if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+    set host_arch=arm64
+) else (
+    set host_arch=x86
+)
+
+set host_platform=win32
+set vendor_platform_dir=%vendor_dir%\%host_platform%-%host_arch%
+
+set vendor_emsdk_dir=%vendor_platform_dir%\emsdk
+
 if "%vendor%"=="1" (
     echo === Downloading vendor dependencies ===
 
@@ -199,9 +211,9 @@ if "%game%"=="1" set build_native=1
 if "%dll%"=="1" set build_native=1
 
 if "!build_native!"=="1" (
-    set webgpu_dir=%root_dir%\vendor\webgpu
-    set sdl3_dir=%root_dir%\vendor\SDL3
-    set sdl3_image_dir=%root_dir%\vendor\SDL3_image
+    set webgpu_dir=%vendor_platform_dir%\webgpu
+    set sdl3_dir=%vendor_platform_dir%\SDL3
+    set sdl3_image_dir=%vendor_platform_dir%\SDL3_image
 
     if not exist "!webgpu_dir!\include\webgpu\webgpu.h" (
         echo WebGPU headers not found at !webgpu_dir!\include\webgpu\webgpu.h
@@ -270,7 +282,7 @@ if "%web%"=="1" (
     if exist "!emsdk_env!" call "!emsdk_env!" >nul
 
     where emcc >nul 2>&1 || (
-        echo emcc not found. Run: build vendor
+        echo emcc not found. Expected emsdk at %vendor_dir%\%host_platform%-%host_arch%\emsdk\ or on PATH.
         exit /b 1
     )
 
@@ -294,7 +306,7 @@ if "%run%"=="1" (
     )
 
     where emrun >nul 2>&1 || (
-        echo emrun not found. Run: build vendor
+        echo emrun not found. Expected emsdk at %vendor_dir%\%host_platform%-%host_arch%\emsdk\ or on PATH.
         exit /b 1
     )
 
@@ -304,7 +316,7 @@ if "%run%"=="1" (
 
 :: --- Warn On No Builds -------------------------------------------------------
 if "%didbuild%"=="" if not "%run%"=="1" (
-    echo [WARNING] no valid build target. usage: build [vendor] [game^|dll] [web^|web_run] [run] [debug^|release]
+    echo [WARNING] no valid build target. usage: build [game^|dll] [web^|web_run] [run] [debug^|release]
     exit /b 1
 )
 

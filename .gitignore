@@ -8,11 +8,7 @@ obj/
 *.so
 *.dylib
 
-# Vendor dependencies (downloaded by ./build.sh vendor)
-vendor/webgpu/
-vendor/SDL3/
-vendor/SDL3_image/
-vendor/emsdk/
+# Vendored third-party dependencies live under vendor/ and are tracked.
 
 # Generated files
 compile_commands.json
