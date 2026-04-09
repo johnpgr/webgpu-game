@@ -49,8 +49,9 @@ case "$(uname -m)" in
   *)       echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
 esac
 
-vendor_platform_dir="$vendor_dir/$host_platform-$host_arch"
-vendor_emsdk_dir="$vendor_platform_dir/emsdk"
+vendor_inc_dir="$vendor_dir/include"
+vendor_lib_dir="$vendor_dir/lib/$host_platform-$host_arch"
+vendor_emsdk_dir="$vendor_dir/emsdk"
 
 warning_flags="-Wall -Wextra -Wno-unused-function -Wno-missing-field-initializers -Wno-c99-designator"
 didbuild=""
@@ -62,32 +63,22 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   echo "[$platform-$host_arch]"
 
   # --- Find WebGPU (wgpu-native) ---------------------------------------------
-  webgpu_inc="$vendor_platform_dir/webgpu/include"
-  webgpu_lib="$vendor_platform_dir/webgpu/lib"
-
-  if [ ! -f "$webgpu_inc/webgpu/webgpu.h" ]; then
-    echo "WebGPU headers not found at $webgpu_inc/webgpu/webgpu.h" >&2
-    echo "Place vendored native dependencies under $vendor_dir/$platform-$host_arch/" >&2
+  if [ ! -f "$vendor_inc_dir/webgpu/webgpu.h" ]; then
+    echo "WebGPU headers not found at $vendor_inc_dir/webgpu/webgpu.h" >&2
+    echo "Place vendored headers under $vendor_inc_dir/" >&2
     exit 1
   fi
 
-  webgpu_cflags="-I$webgpu_inc"
-  webgpu_libs="-L$webgpu_lib -lwgpu_native -Wl,-rpath,$webgpu_lib"
+  webgpu_cflags="-I$vendor_inc_dir"
+  webgpu_libs="-L$vendor_lib_dir -lwgpu_native -Wl,-rpath,$vendor_lib_dir"
 
-  # Try to find SDL3: vendor dir first, then pkg-config, then system paths
+  # Try to find SDL3: vendor lib dir first, then pkg-config, then system paths
   sdl3_cflags=""
   sdl3_libs=""
-  sdl3_vendor_inc="$vendor_platform_dir/SDL3/include"
-  sdl3_vendor_lib="$vendor_platform_dir/SDL3/lib"
-  sdl3_vendor_lib64="$vendor_platform_dir/SDL3/lib64"
 
-  if [ -f "$sdl3_vendor_inc/SDL3/SDL.h" ]; then
-    sdl3_cflags="-I$sdl3_vendor_inc"
-    if [ -f "$sdl3_vendor_lib64/libSDL3.so" ] || [ -f "$sdl3_vendor_lib64/libSDL3.dylib" ]; then
-      sdl3_libs="-L$sdl3_vendor_lib64 -lSDL3 -Wl,-rpath,$sdl3_vendor_lib64"
-    elif [ -f "$sdl3_vendor_lib/libSDL3.so" ] || [ -f "$sdl3_vendor_lib/libSDL3.dylib" ]; then
-      sdl3_libs="-L$sdl3_vendor_lib -lSDL3 -Wl,-rpath,$sdl3_vendor_lib"
-    fi
+  if [ -f "$vendor_inc_dir/SDL3/SDL.h" ] && { [ -f "$vendor_lib_dir/libSDL3.so.0" ] || [ -f "$vendor_lib_dir/libSDL3.dylib" ]; }; then
+    sdl3_cflags="-I$vendor_inc_dir"
+    sdl3_libs="-L$vendor_lib_dir -lSDL3 -Wl,-rpath,$vendor_lib_dir"
   elif pkg-config --exists sdl3 2>/dev/null; then
     sdl3_cflags=$(pkg-config --cflags sdl3)
     sdl3_libs=$(pkg-config --libs sdl3)
@@ -107,24 +98,17 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   fi
 
   if [ -z "$sdl3_cflags" ] || [ -z "$sdl3_libs" ]; then
-    echo "SDL3 not found. Expected vendored files under $vendor_dir/$platform-$host_arch/SDL3 or an installed system package." >&2
+    echo "SDL3 not found. Expected vendored files under $vendor_lib_dir/ or an installed system package." >&2
     exit 1
   fi
 
   # --- Find SDL3_image -------------------------------------------------------
   sdl3_image_cflags=""
   sdl3_image_libs=""
-  sdl3_image_vendor_inc="$vendor_platform_dir/SDL3_image/include"
-  sdl3_image_vendor_lib="$vendor_platform_dir/SDL3_image/lib"
-  sdl3_image_vendor_lib64="$vendor_platform_dir/SDL3_image/lib64"
 
-  if [ -f "$sdl3_image_vendor_inc/SDL3_image/SDL_image.h" ]; then
-    sdl3_image_cflags="-I$sdl3_image_vendor_inc"
-    if [ -f "$sdl3_image_vendor_lib64/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib64/libSDL3_image.dylib" ]; then
-      sdl3_image_libs="-L$sdl3_image_vendor_lib64 -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib64"
-    elif [ -f "$sdl3_image_vendor_lib/libSDL3_image.so" ] || [ -f "$sdl3_image_vendor_lib/libSDL3_image.dylib" ]; then
-      sdl3_image_libs="-L$sdl3_image_vendor_lib -lSDL3_image -Wl,-rpath,$sdl3_image_vendor_lib"
-    fi
+  if [ -f "$vendor_inc_dir/SDL3_image/SDL_image.h" ] && { [ -f "$vendor_lib_dir/libSDL3_image.so.0" ] || [ -f "$vendor_lib_dir/libSDL3_image.dylib" ]; }; then
+    sdl3_image_cflags="-I$vendor_inc_dir"
+    sdl3_image_libs="-L$vendor_lib_dir -lSDL3_image -Wl,-rpath,$vendor_lib_dir"
   elif pkg-config --exists sdl3-image 2>/dev/null; then
     sdl3_image_cflags=$(pkg-config --cflags sdl3-image)
     sdl3_image_libs=$(pkg-config --libs sdl3-image)
@@ -144,7 +128,7 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   fi
 
   if [ -z "$sdl3_image_cflags" ] || [ -z "$sdl3_image_libs" ]; then
-    echo "SDL3_image not found. Expected vendored files under $vendor_dir/$platform-$host_arch/SDL3_image or an installed system package." >&2
+    echo "SDL3_image not found. Expected vendored files under $vendor_lib_dir/ or an installed system package." >&2
     exit 1
   fi
 
@@ -178,12 +162,8 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
     fi
 
     # --- Copy shared libs to bin -----------------------------------------------
-    for d in "$vendor_platform_dir/SDL3/lib64" "$vendor_platform_dir/SDL3/lib" "$vendor_platform_dir/SDL3_image/lib64" "$vendor_platform_dir/SDL3_image/lib" "$vendor_platform_dir/webgpu/lib"; do
-      if [ -d "$d" ]; then
-        for f in "$d"/libSDL3*.so* "$d"/libSDL3*.dylib* "$d"/libwgpu_native.so* "$d"/libwgpu_native.dylib*; do
-          [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
-        done
-      fi
+    for f in "$vendor_lib_dir"/libSDL3*.so* "$vendor_lib_dir"/libSDL3*.dylib* "$vendor_lib_dir"/libwgpu_native.so* "$vendor_lib_dir"/libwgpu_native.dylib*; do
+      [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
     done
   fi
 
@@ -219,7 +199,7 @@ if [ "${web:-}" = "1" ]; then
   fi
 
   if ! command -v emcc >/dev/null 2>&1; then
-    echo "emcc not found. Expected emsdk at $vendor_dir/$host_platform-$host_arch/emsdk/ or on PATH." >&2
+    echo "emcc not found. Expected emsdk at $vendor_dir/emsdk/ or on PATH." >&2
     exit 1
   fi
 
