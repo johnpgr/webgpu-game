@@ -217,17 +217,37 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
 
   if [ "${debug:-}" = "1" ]; then
     compile="$compiler -g -O0 $common $sdl3_cflags $sdl3_image_cflags"
+    build_config="debug"
   fi
   if [ "${release:-}" = "1" ]; then
     compile="$compiler -O2 -DNDEBUG $common $sdl3_cflags $sdl3_image_cflags"
+    build_config="release"
+  fi
+
+  mkdir -p "$bin_dir"
+
+  if [ "$platform" = "win32" ]; then
+    pch_dir="$bin_dir/pch"
+    pch_header="$src_dir/pch/native_win32.h"
+    pch_file="$pch_dir/native-$platform-$host_arch-$build_config.pch"
+    pch_signature_file="$pch_file.flags"
+    pch_signature="$compile|$pch_header"
+
+    mkdir -p "$pch_dir"
+
+    if [ ! -f "$pch_file" ] || [ "$pch_header" -nt "$pch_file" ] || [ ! -f "$pch_signature_file" ] || [ "$(<"$pch_signature_file")" != "$pch_signature" ]; then
+      echo "Building native PCH..."
+      $compile -Winvalid-pch -x c++-header "$pch_header" -o "$pch_file"
+      printf '%s' "$pch_signature" > "$pch_signature_file"
+    fi
+
+    compile="$compile -Winvalid-pch -include-pch $pch_file"
   fi
 
   dll_compile="$compile $dll_compile_extra"
 
-  mkdir -p "$bin_dir"
-
   if [ "${game:-}" = "1" ]; then
-    if [ -d "$root_dir/assets" ]; then
+    if [ -d "$root_dir/assets" ] && [ ! -d "$bin_dir/assets" ]; then
       cp -r "$root_dir/assets" "$bin_dir/"
     fi
 
