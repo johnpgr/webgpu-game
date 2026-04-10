@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdlib.h> // for abort
-#include <time.h>   // for clock_gettime on Linux
 
 #include "base/base_types.h"
 
@@ -19,9 +18,6 @@
 
 #if defined(_MSC_VER)
 #define COMPILER_MSVC 1
-#include <intrin.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #else
 #define COMPILER_MSVC 0
 #endif
@@ -134,37 +130,23 @@ inline bool align_up_pow2_u64(u64 value, u64 alignment, u64* out) {
     return false;
 }
 
-inline f64 get_ticks_f64(void) {
-#if OS_WINDOWS
-    LARGE_INTEGER counter = {};
-    LARGE_INTEGER frequency = {};
-    QueryPerformanceCounter(&counter);
-    QueryPerformanceFrequency(&frequency);
-    return (f64)counter.QuadPart / (f64)frequency.QuadPart;
-#else
-    timespec ts = {};
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (f64)ts.tv_sec + (f64)ts.tv_nsec / 1000000000.0;
-#endif
-}
-
 #include "base/base_log.h"
 
 #ifndef NDEBUG
-#if COMPILER_MSVC
-#define ASSERT(expr, msg)                                                      \
-    do {                                                                       \
-        if(!(expr)) {                                                          \
-            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                \
-            __debugbreak();                                                    \
-        }                                                                      \
-    } while(0)
-#elif COMPILER_CLANG
+#if COMPILER_CLANG
 #define ASSERT(expr, msg)                                                      \
     do {                                                                       \
         if(!(expr)) {                                                          \
             LOG_FATAL("assertion failed: %s - %s", #expr, msg);                \
             __builtin_debugtrap();                                             \
+        }                                                                      \
+    } while(0)
+#elif COMPILER_MSVC
+#define ASSERT(expr, msg)                                                      \
+    do {                                                                       \
+        if(!(expr)) {                                                          \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                \
+            abort();                                                           \
         }                                                                      \
     } while(0)
 #elif COMPILER_GCC

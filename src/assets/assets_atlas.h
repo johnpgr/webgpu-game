@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base/base_mod.h"
+#include "base/base_arena.h"
 
 struct AtlasFrame {
     vec2 uv_min;

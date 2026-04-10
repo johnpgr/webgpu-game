@@ -1,6 +1,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "assets/assets_atlas.h"
+#include "draw/draw_core.h"
 #include "render/webgpu.h"
 #include "os/os_mod.h"
 
@@ -166,11 +168,8 @@ internal void wgpu_device_lost_callback(
     LOG_ERROR("[WebGPU DEVICE LOST] %.*s", (int)message.length, message.data);
 }
 
-internal WGPUSurface create_surface(
-    WGPUInstance instance,
-    SDL_Window* window,
-    WebGPUState* state
-) {
+internal WGPUSurface
+create_surface(WGPUInstance instance, SDL_Window* window, WebGPUState* state) {
     ASSERT(state != nullptr, "WebGPU state must not be null!");
 #if defined(SDL_PLATFORM_WIN32)
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
@@ -316,11 +315,8 @@ internal void wgpu_request_device_callback(
     }
 }
 
-internal WGPUBuffer create_buffer(
-    WGPUDevice device,
-    u64 size,
-    WGPUBufferUsage usage
-) {
+internal WGPUBuffer
+create_buffer(WGPUDevice device, u64 size, WGPUBufferUsage usage) {
     WGPUBufferDescriptor desc = {};
     desc.usage = usage;
     desc.size = size;
@@ -460,10 +456,8 @@ internal bool texture_format_is_srgb(WGPUTextureFormat format) {
     }
 }
 
-internal WGPUTextureFormat pick_surface_format(
-    WGPUTextureFormat* formats,
-    usize format_count
-) {
+internal WGPUTextureFormat
+pick_surface_format(WGPUTextureFormat* formats, usize format_count) {
     WGPUTextureFormat preferred_formats[] = {
         WGPUTextureFormat_BGRA8UnormSrgb,
         WGPUTextureFormat_RGBA8UnormSrgb,

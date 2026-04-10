@@ -1,7 +1,8 @@
 #pragma once
 
-#include "base/base_mod.h"
-#include "draw/draw_mod.h"
+#include "base/base_arena.h"
+
+struct RenderFrame;
 
 // #######################################################
 //                  Entity Handle
@@ -118,7 +119,7 @@ struct Entity {
 // Container for all entities. Fixed capacity, arena-backed.
 struct GameWorld {
     Arena* arena;
-    Entity* entities;   // entity storage (index 0 is reserved/invalid)
+    Entity* entities; // entity storage (index 0 is reserved/invalid)
     u32 capacity;
     u32 free_list_head; // index of first free slot (0 = none available)
     u32 active_count;   // number of alive entities

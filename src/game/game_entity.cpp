@@ -2,6 +2,7 @@
 
 #include "../../assets/sprites/atlas.h"
 #include "assets/assets_atlas.h"
+#include "draw/draw_mod.h"
 
 struct WorldSpriteCandidate {
     vec2 uv_min;
