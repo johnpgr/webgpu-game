@@ -90,6 +90,7 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   sdl3_libs=""
   sdl3_image_cflags=""
   sdl3_image_libs=""
+  vendor_rpath=""
 
   if [ "$platform" = "win32" ]; then
     if [ ! -f "$vendor_inc_dir/SDL3/SDL.h" ]; then
@@ -132,11 +133,12 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
     sdl3_image_cflags="-I$vendor_inc_dir"
     sdl3_image_libs="$vendor_lib_dir/SDL3_image.lib"
   else
-    webgpu_libs="-L$vendor_lib_dir -lwgpu_native -Wl,-rpath,$vendor_lib_dir"
+    webgpu_libs="-L$vendor_lib_dir -lwgpu_native"
+    vendor_rpath="-Wl,-rpath,$vendor_lib_dir"
 
     if [ -f "$vendor_inc_dir/SDL3/SDL.h" ] && { [ -f "$vendor_lib_dir/libSDL3.so.0" ] || [ -f "$vendor_lib_dir/libSDL3.dylib" ]; }; then
       sdl3_cflags="-I$vendor_inc_dir"
-      sdl3_libs="-L$vendor_lib_dir -lSDL3 -Wl,-rpath,$vendor_lib_dir"
+      sdl3_libs="-L$vendor_lib_dir -lSDL3"
     elif pkg-config --exists sdl3 2>/dev/null; then
       sdl3_cflags=$(pkg-config --cflags sdl3)
       sdl3_libs=$(pkg-config --libs sdl3)
@@ -162,7 +164,7 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
 
     if [ -f "$vendor_inc_dir/SDL3_image/SDL_image.h" ] && { [ -f "$vendor_lib_dir/libSDL3_image.so.0" ] || [ -f "$vendor_lib_dir/libSDL3_image.dylib" ]; }; then
       sdl3_image_cflags="-I$vendor_inc_dir"
-      sdl3_image_libs="-L$vendor_lib_dir -lSDL3_image -Wl,-rpath,$vendor_lib_dir"
+      sdl3_image_libs="-L$vendor_lib_dir -lSDL3_image"
     elif pkg-config --exists sdl3-image 2>/dev/null; then
       sdl3_image_cflags=$(pkg-config --cflags sdl3-image)
       sdl3_image_libs=$(pkg-config --libs sdl3-image)
@@ -193,23 +195,22 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
     common="$common -ftime-trace"
   fi
   host_link=""
-  dll_link=""
+  dll_link="$sdl3_image_libs $sdl3_libs $vendor_rpath"
   host_exe="$bin_dir/game_host"
 
   if [ "$platform" = "macos" ]; then
     common="$common -DSDL_PLATFORM_MACOS"
-    host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs -framework Cocoa -framework IOKit -framework CoreVideo -lpthread"
+    host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $vendor_rpath -framework Cocoa -framework IOKit -framework CoreVideo -lpthread"
     dll_ext=".dylib"
     dll_compile_extra="-fPIC -shared"
   elif [ "$platform" = "linux" ]; then
     common="$common -DSDL_PLATFORM_LINUX"
-    host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs -lpthread"
+    host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $vendor_rpath -lpthread"
     dll_ext=".so"
     dll_compile_extra="-fPIC -shared"
   else
     common="$common -DSDL_PLATFORM_WIN32 -D_CRT_SECURE_NO_WARNINGS -fuse-ld=lld"
     host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs -luser32 -lgdi32 -lshell32"
-    dll_link="$sdl3_image_libs $sdl3_libs"
     host_exe="$bin_dir/game_host.exe"
     dll_ext=".dll"
     dll_compile_extra="-shared"
