@@ -73,6 +73,30 @@ ensure_not_lfs_pointer() {
   fi
 }
 
+ensure_native_pch() {
+  pch_compile="$1"
+  pch_header="$2"
+  pch_file="$3"
+  pch_signature_file="$4"
+  pch_signature="$pch_compile|$pch_header"
+
+  if [ ! -f "$pch_file" ] || [ "$pch_header" -nt "$pch_file" ] || [ ! -f "$pch_signature_file" ] || [ "$(<"$pch_signature_file")" != "$pch_signature" ]; then
+    echo "Building native PCH: $(basename "$pch_file")"
+    $pch_compile -Winvalid-pch -x c++-header "$pch_header" -o "$pch_file"
+    printf '%s' "$pch_signature" > "$pch_signature_file"
+  fi
+}
+
+copy_if_needed() {
+  src="$1"
+  dst_dir="$2"
+  dst="$dst_dir/$(basename "$src")"
+
+  if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ]; then
+    cp -p "$src" "$dst_dir/"
+  fi
+}
+
 # --- Build Native Game (desktop) ---------------------------------------------
 if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   platform="$host_platform"
@@ -90,6 +114,7 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   sdl3_libs=""
   sdl3_image_cflags=""
   sdl3_image_libs=""
+  webgpu_runtime=""
   vendor_rpath=""
 
   if [ "$platform" = "win32" ]; then
@@ -105,9 +130,9 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
       exit 1
     fi
 
-    if [ ! -f "$vendor_lib_dir/wgpu_native.lib" ]; then
-      echo "WebGPU $host_arch libraries not found at $vendor_lib_dir/wgpu_native.lib" >&2
-      echo "Place native Windows libraries under $vendor_lib_dir/" >&2
+    if [ ! -f "$vendor_lib_dir/wgpu_native.dll.lib" ] || [ ! -f "$vendor_lib_dir/wgpu_native.dll" ]; then
+      echo "Shared WebGPU $host_arch libraries not found at $vendor_lib_dir/wgpu_native.dll(.lib)" >&2
+      echo "Place native Windows shared libraries under $vendor_lib_dir/" >&2
       exit 1
     fi
 
@@ -123,18 +148,33 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
       exit 1
     fi
 
-    ensure_not_lfs_pointer "$vendor_lib_dir/wgpu_native.lib"
+    ensure_not_lfs_pointer "$vendor_lib_dir/wgpu_native.dll.lib"
+    ensure_not_lfs_pointer "$vendor_lib_dir/wgpu_native.dll"
+    webgpu_libs="$vendor_lib_dir/wgpu_native.dll.lib"
+    webgpu_runtime="$vendor_lib_dir/wgpu_native.dll"
+
     ensure_not_lfs_pointer "$vendor_lib_dir/SDL3.lib"
     ensure_not_lfs_pointer "$vendor_lib_dir/SDL3_image.lib"
 
-    webgpu_libs="$vendor_lib_dir/wgpu_native.lib"
     sdl3_cflags="-I$vendor_inc_dir"
     sdl3_libs="$vendor_lib_dir/SDL3.lib"
     sdl3_image_cflags="-I$vendor_inc_dir"
     sdl3_image_libs="$vendor_lib_dir/SDL3_image.lib"
   else
-    webgpu_libs="-L$vendor_lib_dir -lwgpu_native"
     vendor_rpath="-Wl,-rpath,$vendor_lib_dir"
+
+    if [ -f "$vendor_lib_dir/libwgpu_native.so" ]; then
+      ensure_not_lfs_pointer "$vendor_lib_dir/libwgpu_native.so"
+      webgpu_libs="$vendor_lib_dir/libwgpu_native.so"
+      webgpu_runtime="$vendor_lib_dir/libwgpu_native.so"
+    elif [ -f "$vendor_lib_dir/libwgpu_native.dylib" ]; then
+      ensure_not_lfs_pointer "$vendor_lib_dir/libwgpu_native.dylib"
+      webgpu_libs="$vendor_lib_dir/libwgpu_native.dylib"
+      webgpu_runtime="$vendor_lib_dir/libwgpu_native.dylib"
+    else
+      echo "Shared WebGPU native library not found under $vendor_lib_dir/" >&2
+      exit 1
+    fi
 
     if [ -f "$vendor_inc_dir/SDL3/SDL.h" ] && { [ -f "$vendor_lib_dir/libSDL3.so.0" ] || [ -f "$vendor_lib_dir/libSDL3.dylib" ]; }; then
       sdl3_cflags="-I$vendor_inc_dir"
@@ -202,17 +242,20 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
     common="$common -DSDL_PLATFORM_MACOS"
     host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $vendor_rpath -framework Cocoa -framework IOKit -framework CoreVideo -lpthread"
     dll_ext=".dylib"
+    dll_pch_extra="-fPIC"
     dll_compile_extra="-fPIC -shared"
   elif [ "$platform" = "linux" ]; then
     common="$common -DSDL_PLATFORM_LINUX"
     host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs $vendor_rpath -lpthread"
     dll_ext=".so"
+    dll_pch_extra="-fPIC"
     dll_compile_extra="-fPIC -shared"
   else
     common="$common -DSDL_PLATFORM_WIN32 -D_CRT_SECURE_NO_WARNINGS -fuse-ld=lld"
     host_link="$webgpu_libs $sdl3_image_libs $sdl3_libs -luser32 -lgdi32 -lshell32"
     host_exe="$bin_dir/game_host.exe"
     dll_ext=".dll"
+    dll_pch_extra=""
     dll_compile_extra="-shared"
   fi
 
@@ -227,38 +270,40 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
 
   mkdir -p "$bin_dir"
 
-  if [ "$platform" = "win32" ]; then
-    pch_dir="$bin_dir/pch"
-    pch_header="$src_dir/pch/native_win32.h"
-    pch_file="$pch_dir/native-$platform-$host_arch-$build_config.pch"
-    pch_signature_file="$pch_file.flags"
-    pch_signature="$compile|$pch_header"
-
-    mkdir -p "$pch_dir"
-
-    if [ ! -f "$pch_file" ] || [ "$pch_header" -nt "$pch_file" ] || [ ! -f "$pch_signature_file" ] || [ "$(<"$pch_signature_file")" != "$pch_signature" ]; then
-      echo "Building native PCH..."
-      $compile -Winvalid-pch -x c++-header "$pch_header" -o "$pch_file"
-      printf '%s' "$pch_signature" > "$pch_signature_file"
-    fi
-
-    compile="$compile -Winvalid-pch -include-pch $pch_file"
-  fi
-
+  host_compile="$compile"
+  dll_pch_compile="$compile $dll_pch_extra"
   dll_compile="$compile $dll_compile_extra"
 
+  pch_dir="$bin_dir/pch"
+  pch_header="$src_dir/pch/native_desktop.h"
+  host_pch_file="$pch_dir/native-$platform-$host_arch-$build_config-host.pch"
+  host_pch_signature_file="$host_pch_file.flags"
+  dll_pch_file="$pch_dir/native-$platform-$host_arch-$build_config-dll.pch"
+  dll_pch_signature_file="$dll_pch_file.flags"
+
+  mkdir -p "$pch_dir"
+
   if [ "${game:-}" = "1" ]; then
-    if [ -d "$root_dir/assets" ] && [ ! -d "$bin_dir/assets" ]; then
-      cp -r "$root_dir/assets" "$bin_dir/"
+    ensure_native_pch "$host_compile" "$pch_header" "$host_pch_file" "$host_pch_signature_file"
+    host_compile="$host_compile -Winvalid-pch -include-pch $host_pch_file"
+  fi
+
+  ensure_native_pch "$dll_pch_compile" "$pch_header" "$dll_pch_file" "$dll_pch_signature_file"
+  dll_compile="$dll_compile -Winvalid-pch -include-pch $dll_pch_file"
+
+  if [ "${game:-}" = "1" ] && [ "${install:-}" = "1" ]; then
+    if [ -d "$root_dir/assets" ]; then
+      mkdir -p "$bin_dir/assets"
+      cp -ru "$root_dir/assets/." "$bin_dir/assets/"
     fi
 
     if [ "$platform" = "win32" ]; then
-      for f in "$vendor_lib_dir"/wgpu_native.dll "$vendor_lib_dir"/SDL3.dll "$vendor_lib_dir"/SDL3_image.dll; do
-        [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
+      for f in "$webgpu_runtime" "$vendor_lib_dir"/SDL3.dll "$vendor_lib_dir"/SDL3_image.dll; do
+        [ -f "$f" ] && copy_if_needed "$f" "$bin_dir" 2>/dev/null || true
       done
     else
-      for f in "$vendor_lib_dir"/libSDL3*.so* "$vendor_lib_dir"/libSDL3*.dylib* "$vendor_lib_dir"/libwgpu_native.so* "$vendor_lib_dir"/libwgpu_native.dylib*; do
-        [ -f "$f" ] && cp "$f" "$bin_dir/" 2>/dev/null || true
+      for f in "$vendor_lib_dir"/libSDL3*.so* "$vendor_lib_dir"/libSDL3*.dylib* "$webgpu_runtime" "$vendor_lib_dir"/libwgpu_native.so.* "$vendor_lib_dir"/libwgpu_native.dylib.*; do
+        [ -f "$f" ] && copy_if_needed "$f" "$bin_dir" 2>/dev/null || true
       done
     fi
   fi
@@ -266,15 +311,15 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   didbuild=1
 
   build_failed=0
+  game_dll_path="$bin_dir/game_code$dll_ext"
 
   if [ "${game:-}" = "1" ]; then
     echo "Building game host executable..."
-    $compile "$src_dir/app/game_main.cpp" $host_link -o "$host_exe" &
+    $host_compile "$src_dir/app/game_main.cpp" $host_link -o "$host_exe" &
     host_pid=$!
   fi
 
   echo "Building game shared library..."
-  game_dll_path="$bin_dir/game_code$dll_ext"
   $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags $dll_link -o "$game_dll_path" &
   dll_pid=$!
 
@@ -352,6 +397,6 @@ fi
 
 # --- Warn On No Builds -------------------------------------------------------
 if [ -z "$didbuild" ] && [ "${run:-}" != "1" ]; then
-  echo "[WARNING] no valid build target. usage: ./build.sh [game|dll] [web|web_run|run] [debug|release]" >&2
+  echo "[WARNING] no valid build target. usage: ./build.sh [game|dll] [web|web_run|run] [debug|release] [install]" >&2
   exit 1
 fi
