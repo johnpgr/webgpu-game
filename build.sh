@@ -161,7 +161,11 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
     sdl3_image_cflags="-I$vendor_inc_dir"
     sdl3_image_libs="$vendor_lib_dir/SDL3_image.lib"
   else
-    vendor_rpath="-Wl,-rpath,$vendor_lib_dir"
+    if [ "${install:-}" = "1" ]; then
+      vendor_rpath="-Wl,-rpath,\$ORIGIN"
+    else
+      vendor_rpath="-Wl,-rpath,$vendor_lib_dir"
+    fi
 
     if [ -f "$vendor_lib_dir/libwgpu_native.so" ]; then
       ensure_not_lfs_pointer "$vendor_lib_dir/libwgpu_native.so"
@@ -178,7 +182,11 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
 
     if [ -f "$vendor_inc_dir/SDL3/SDL.h" ] && { [ -f "$vendor_lib_dir/libSDL3.so.0" ] || [ -f "$vendor_lib_dir/libSDL3.dylib" ]; }; then
       sdl3_cflags="-I$vendor_inc_dir"
-      sdl3_libs="-L$vendor_lib_dir -lSDL3"
+      if [ -f "$vendor_lib_dir/libSDL3.so.0" ]; then
+        sdl3_libs="$vendor_lib_dir/libSDL3.so.0"
+      else
+        sdl3_libs="$vendor_lib_dir/libSDL3.dylib"
+      fi
     elif pkg-config --exists sdl3 2>/dev/null; then
       sdl3_cflags=$(pkg-config --cflags sdl3)
       sdl3_libs=$(pkg-config --libs sdl3)
@@ -204,7 +212,11 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
 
     if [ -f "$vendor_inc_dir/SDL3_image/SDL_image.h" ] && { [ -f "$vendor_lib_dir/libSDL3_image.so.0" ] || [ -f "$vendor_lib_dir/libSDL3_image.dylib" ]; }; then
       sdl3_image_cflags="-I$vendor_inc_dir"
-      sdl3_image_libs="-L$vendor_lib_dir -lSDL3_image"
+      if [ -f "$vendor_lib_dir/libSDL3_image.so.0" ]; then
+        sdl3_image_libs="$vendor_lib_dir/libSDL3_image.so.0"
+      else
+        sdl3_image_libs="$vendor_lib_dir/libSDL3_image.dylib"
+      fi
     elif pkg-config --exists sdl3-image 2>/dev/null; then
       sdl3_image_cflags=$(pkg-config --cflags sdl3-image)
       sdl3_image_libs=$(pkg-config --libs sdl3-image)
