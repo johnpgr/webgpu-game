@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "render/webgpu.h"
+#include "os/os_mod.h"
 
 #pragma push_macro("internal")
 #undef internal
@@ -31,8 +32,6 @@
 #include "webgpu/webgpu.h"
 #include "webgpu/wgpu.h"
 #endif
-
-#include "os/os_mod.h"
 
 struct WebGPUState {
     WGPUInstance instance;
@@ -86,13 +85,13 @@ struct CameraUniform {
 };
 static_assert(sizeof(CameraUniform) == 64, "Camera uniform must be 64 bytes");
 
-static WGPUInstance get_instance(void) {
+internal WGPUInstance get_instance(void) {
     WGPUInstanceDescriptor desc = {};
     return wgpuCreateInstance(&desc);
 }
 
 #if !OS_EMSCRIPTEN
-static void wgpu_log_callback(
+internal void wgpu_log_callback(
     WGPULogLevel level,
     WGPUStringView message,
     void* userdata
@@ -122,7 +121,7 @@ static void wgpu_log_callback(
 }
 #endif
 
-static void wgpu_error_callback(
+internal void wgpu_error_callback(
     WGPUDevice* device,
     WGPUErrorType type,
     WGPUStringView message,
@@ -153,7 +152,7 @@ static void wgpu_error_callback(
     LOG_ERROR("[WebGPU %s] %.*s", type_str, (int)message.length, message.data);
 }
 
-static void wgpu_device_lost_callback(
+internal void wgpu_device_lost_callback(
     WGPUDevice* device,
     WGPUDeviceLostReason reason,
     WGPUStringView message,
@@ -167,7 +166,7 @@ static void wgpu_device_lost_callback(
     LOG_ERROR("[WebGPU DEVICE LOST] %.*s", (int)message.length, message.data);
 }
 
-static WGPUSurface create_surface(
+internal WGPUSurface create_surface(
     WGPUInstance instance,
     SDL_Window* window,
     WebGPUState* state
@@ -275,7 +274,7 @@ static WGPUSurface create_surface(
     return nullptr;
 }
 
-static void wgpu_request_adapter_callback(
+internal void wgpu_request_adapter_callback(
     WGPURequestAdapterStatus status,
     WGPUAdapter adapter,
     WGPUStringView message,
@@ -296,7 +295,7 @@ static void wgpu_request_adapter_callback(
     }
 }
 
-static void wgpu_request_device_callback(
+internal void wgpu_request_device_callback(
     WGPURequestDeviceStatus status,
     WGPUDevice device,
     WGPUStringView message,
@@ -317,7 +316,7 @@ static void wgpu_request_device_callback(
     }
 }
 
-static WGPUBuffer create_buffer(
+internal WGPUBuffer create_buffer(
     WGPUDevice device,
     u64 size,
     WGPUBufferUsage usage
@@ -329,7 +328,7 @@ static WGPUBuffer create_buffer(
     return wgpuDeviceCreateBuffer(device, &desc);
 }
 
-static void create_depth_texture(WebGPUState* state) {
+internal void create_depth_texture(WebGPUState* state) {
     if(state->depth_view) {
         wgpuTextureViewRelease(state->depth_view);
         state->depth_view = nullptr;
@@ -354,7 +353,7 @@ static void create_depth_texture(WebGPUState* state) {
     state->depth_view = wgpuTextureCreateView(state->depth_texture, nullptr);
 }
 
-static u32 next_pow2_u32(u32 value) {
+internal u32 next_pow2_u32(u32 value) {
     u32 result = 1;
     while(result < value) {
         result <<= 1;
@@ -362,7 +361,7 @@ static u32 next_pow2_u32(u32 value) {
     return result;
 }
 
-static void ensure_instance_buffer(WebGPUState* state, u32 required) {
+internal void ensure_instance_buffer(WebGPUState* state, u32 required) {
     if(required <= state->instance_buffer_capacity) {
         return;
     }
@@ -380,7 +379,7 @@ static void ensure_instance_buffer(WebGPUState* state, u32 required) {
     state->instance_buffer_capacity = new_capacity;
 }
 
-static void ensure_background_instance_buffer(
+internal void ensure_background_instance_buffer(
     WebGPUState* state,
     u32 required
 ) {
@@ -401,7 +400,7 @@ static void ensure_background_instance_buffer(
     state->background_instance_buffer_capacity = new_capacity;
 }
 
-static void ensure_sprite_upload_data(WebGPUState* state, u32 required) {
+internal void ensure_sprite_upload_data(WebGPUState* state, u32 required) {
     if(required <= state->sprite_upload_capacity) {
         return;
     }
@@ -416,7 +415,7 @@ static void ensure_sprite_upload_data(WebGPUState* state, u32 required) {
     state->sprite_upload_capacity = new_capacity;
 }
 
-static void ensure_background_upload_data(WebGPUState* state, u32 required) {
+internal void ensure_background_upload_data(WebGPUState* state, u32 required) {
     if(required <= state->background_upload_capacity) {
         return;
     }
@@ -434,7 +433,7 @@ static void ensure_background_upload_data(WebGPUState* state, u32 required) {
     state->background_upload_capacity = new_capacity;
 }
 
-static f32 srgb_channel_to_linear(f32 channel) {
+internal f32 srgb_channel_to_linear(f32 channel) {
     if(channel <= 0.04045f) {
         return channel / 12.92f;
     }
@@ -442,7 +441,7 @@ static f32 srgb_channel_to_linear(f32 channel) {
     return powf((channel + 0.055f) / 1.055f, 2.4f);
 }
 
-static vec4 authored_color_to_render_color(vec4 color) {
+internal vec4 authored_color_to_render_color(vec4 color) {
     return vec4(
         srgb_channel_to_linear(color.r),
         srgb_channel_to_linear(color.g),
@@ -451,7 +450,7 @@ static vec4 authored_color_to_render_color(vec4 color) {
     );
 }
 
-static bool texture_format_is_srgb(WGPUTextureFormat format) {
+internal bool texture_format_is_srgb(WGPUTextureFormat format) {
     switch(format) {
         case WGPUTextureFormat_RGBA8UnormSrgb:
         case WGPUTextureFormat_BGRA8UnormSrgb:
@@ -461,7 +460,7 @@ static bool texture_format_is_srgb(WGPUTextureFormat format) {
     }
 }
 
-static WGPUTextureFormat pick_surface_format(
+internal WGPUTextureFormat pick_surface_format(
     WGPUTextureFormat* formats,
     usize format_count
 ) {
@@ -486,7 +485,7 @@ static WGPUTextureFormat pick_surface_format(
     return formats[0];
 }
 
-static void write_world_camera_uniform(
+internal void write_world_camera_uniform(
     WebGPUState* state,
     WorldCamera* camera,
     u32 surface_width,
@@ -517,7 +516,7 @@ static void write_world_camera_uniform(
     );
 }
 
-static void upload_world_sprites(
+internal void upload_world_sprites(
     WebGPUState* state,
     WorldSpritePass* sprite_pass
 ) {
@@ -541,7 +540,7 @@ static void upload_world_sprites(
     );
 }
 
-static void upload_background_rects(
+internal void upload_background_rects(
     WebGPUState* state,
     BackgroundPass* backgrounds
 ) {
@@ -566,7 +565,7 @@ static void upload_background_rects(
     );
 }
 
-static void render_backgrounds(
+internal void render_backgrounds(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     BackgroundPass* backgrounds
@@ -609,7 +608,7 @@ static void render_backgrounds(
     wgpuRenderPassEncoderDrawIndexed(pass, 6, backgrounds->rect_count, 0, 0, 0);
 }
 
-static void render_world_sprites(
+internal void render_world_sprites(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     WorldSpritePass* sprite_pass
@@ -659,7 +658,7 @@ static void render_world_sprites(
     );
 }
 
-static void render_text(
+internal void render_text(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     TextPass* text
@@ -669,7 +668,7 @@ static void render_text(
     (void)text;
 }
 
-static void render_ui(
+internal void render_ui(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     UiPass* ui
@@ -679,7 +678,7 @@ static void render_ui(
     (void)ui;
 }
 
-static void render_debug(
+internal void render_debug(
     WebGPUState* state,
     WGPURenderPassEncoder pass,
     DebugPass* debug
@@ -689,7 +688,7 @@ static void render_debug(
     (void)debug;
 }
 
-static void configure_surface(WebGPUState* state) {
+internal void configure_surface(WebGPUState* state) {
     if(!state->surface || !state->device) {
         return;
     }
