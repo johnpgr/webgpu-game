@@ -1,26 +1,57 @@
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+
 #include "base/base_threads.h"
 
 #if OS_WINDOWS
 
+internal CRITICAL_SECTION* thread_mutex_handle(ThreadMutex* mutex) {
+    return (CRITICAL_SECTION*)mutex->storage;
+}
+
+internal CONDITION_VARIABLE* thread_condition_variable_handle(
+    ThreadConditionVariable* condition_variable
+) {
+    return (CONDITION_VARIABLE*)condition_variable->storage;
+}
+
+static_assert(
+    sizeof(ThreadMutex) >= sizeof(CRITICAL_SECTION),
+    "ThreadMutex storage is too small for CRITICAL_SECTION"
+);
+static_assert(
+    alignof(ThreadMutex) >= alignof(CRITICAL_SECTION),
+    "ThreadMutex alignment is too small for CRITICAL_SECTION"
+);
+static_assert(
+    sizeof(ThreadConditionVariable) >= sizeof(CONDITION_VARIABLE),
+    "ThreadConditionVariable storage is too small for CONDITION_VARIABLE"
+);
+static_assert(
+    alignof(ThreadConditionVariable) >= alignof(CONDITION_VARIABLE),
+    "ThreadConditionVariable alignment is too small for CONDITION_VARIABLE"
+);
+
 bool init_thread_mutex(ThreadMutex* mutex) {
     ASSERT(mutex != nullptr, "Thread mutex must not be null!");
-    InitializeCriticalSection(&mutex->handle);
+    InitializeCriticalSection(thread_mutex_handle(mutex));
     return true;
 }
 
 void destroy_thread_mutex(ThreadMutex* mutex) {
     ASSERT(mutex != nullptr, "Thread mutex must not be null!");
-    DeleteCriticalSection(&mutex->handle);
+    DeleteCriticalSection(thread_mutex_handle(mutex));
 }
 
 void lock_thread_mutex(ThreadMutex* mutex) {
     ASSERT(mutex != nullptr, "Thread mutex must not be null!");
-    EnterCriticalSection(&mutex->handle);
+    EnterCriticalSection(thread_mutex_handle(mutex));
 }
 
 void unlock_thread_mutex(ThreadMutex* mutex) {
     ASSERT(mutex != nullptr, "Thread mutex must not be null!");
-    LeaveCriticalSection(&mutex->handle);
+    LeaveCriticalSection(thread_mutex_handle(mutex));
 }
 
 bool init_thread_condition_variable(
@@ -30,7 +61,9 @@ bool init_thread_condition_variable(
         condition_variable != nullptr,
         "Thread condition variable must not be null!"
     );
-    InitializeConditionVariable(&condition_variable->handle);
+    InitializeConditionVariable(
+        thread_condition_variable_handle(condition_variable)
+    );
     return true;
 }
 
@@ -50,7 +83,9 @@ void wake_all_thread_condition_variable(
         condition_variable != nullptr,
         "Thread condition variable must not be null!"
     );
-    WakeAllConditionVariable(&condition_variable->handle);
+    WakeAllConditionVariable(
+        thread_condition_variable_handle(condition_variable)
+    );
 }
 
 void wait_thread_condition_variable(
@@ -63,8 +98,8 @@ void wait_thread_condition_variable(
     );
     ASSERT(mutex != nullptr, "Thread mutex must not be null!");
     SleepConditionVariableCS(
-        &condition_variable->handle,
-        &mutex->handle,
+        thread_condition_variable_handle(condition_variable),
+        thread_mutex_handle(mutex),
         INFINITE
     );
 }

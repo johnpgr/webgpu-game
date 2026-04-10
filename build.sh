@@ -253,7 +253,8 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   fi
 
   echo "Building game shared library..."
-  $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags $dll_link -o "$bin_dir/game_code$dll_ext" &
+  game_dll_path="$bin_dir/game_code$dll_ext"
+  $dll_compile "$src_dir/game/game_dll_main.cpp" $webgpu_cflags $sdl3_cflags $sdl3_image_cflags $dll_link -o "$game_dll_path" &
   dll_pid=$!
 
   if [ "${game:-}" = "1" ]; then
@@ -265,7 +266,7 @@ if [ "${game:-}" = "1" ] || [ "${dll:-}" = "1" ]; then
   fi
 
   if wait "$dll_pid"; then
-    echo "Built $bin_dir/game_code$dll_ext"
+    echo "Built $game_dll_path"
   else
     build_failed=1
   fi

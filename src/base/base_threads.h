@@ -20,25 +20,20 @@ struct ThreadConditionVariable {
     int dummy;
 };
 #elif OS_WINDOWS
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
-typedef DWORD ThreadProcResult;
-#define THREAD_PROC_CALL WINAPI
+typedef unsigned long ThreadProcResult;
+#define THREAD_PROC_CALL __stdcall
 #define THREAD_PROC_SUCCESS 0
 
 struct Thread {
-    HANDLE handle;
+    void* handle;
 };
 
 struct ThreadMutex {
-    CRITICAL_SECTION handle;
+    alignas(void*) u8 storage[64];
 };
 
 struct ThreadConditionVariable {
-    CONDITION_VARIABLE handle;
+    alignas(void*) u8 storage[16];
 };
 #else
 #include <pthread.h>

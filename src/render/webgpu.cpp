@@ -15,8 +15,6 @@
 #pragma pop_macro("internal")
 
 #if defined(SDL_PLATFORM_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -180,7 +178,11 @@ create_surface(WGPUInstance instance, SDL_Window* window, WebGPUState* state) {
         SDL_PROP_WINDOW_WIN32_HWND_POINTER,
         nullptr
     );
-    from_hwnd.hinstance = GetModuleHandle(nullptr);
+    from_hwnd.hinstance = SDL_GetPointerProperty(
+        props,
+        SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER,
+        nullptr
+    );
 
     WGPUSurfaceDescriptor desc = {};
     desc.nextInChain = &from_hwnd.chain;

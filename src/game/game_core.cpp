@@ -1,4 +1,5 @@
 #include "../../assets/sprites/atlas.h"
+#include "assets/assets_atlas.h"
 #include "game/game_core.h"
 
 internal f32 demo_lane_min_y = -80.0f;
